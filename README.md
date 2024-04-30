@@ -17,4 +17,36 @@ preview md in vscode: `ctrl+shift+v` • md formatting: https://www.markdownguid
 - [ ] handle HTTP requests
 - [ ] account for if a bus or train breaks down
 - [ ] each station server must support queries from web browser using TCP/IP
-- [ ] each station server must also communicate with other station servers using UDP/IP 
+- [ ] each station server must also communicate with other station servers using UDP/IP
+
+## PYTHON TODO:
+- [ ] Python: TCP connection to client
+- [ ] Python: UDP connection to another server
+- [ ] Python: Read/Store/Update station timetables <--- Get to here by week 10
+- [ ] Python: Implement a protocol for communication <--- Discuss this week 10 meeting
+- [ ] Python: Convert client requests to server format
+- [ ] Python: Convert server responses to client format
+- [ ] Python: Communicate between multiple computers
+- [ ] Python: Find valid, one distance, route
+- [ ] Python: Find valid, multi stop, routes
+- [ ] Python: Find valid routes with cycles present
+- [ ] Python: Find non-valid routes
+- [ ] Python: Find the fastest route (optional?)
+- [ ] Python: Be able to handle real data, 20 stations
+- [ ] Python: Be able to handle multiple outgoing requests at once
+
+## C TODO:
+- [ ] C: TCP connection to client
+- [ ] C: UDP connection to another server
+- [ ] C: Read/Store/Update station timetables <--- Get to here by week 10
+- [ ] C: Implement a protocol for communication <--- Discuss this week 10 meeting
+- [ ] C: Convert client requests to server format
+- [ ] C: Convert server responses to client format
+- [ ] C: Communicate between multiple computers
+- [ ] C: Find valid, one distance, route
+- [ ] C: Find valid, multi stop, routes
+- [ ] C: Find valid routes with cycles present
+- [ ] C: Find non-valid routes
+- [ ] C: Find the fastest route (optional?)
+- [ ] C: Be able to handle real data, 20 stations
+- [ ] C: Be able to handle multiple outgoing requests at once
