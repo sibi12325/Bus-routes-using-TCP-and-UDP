@@ -38,9 +38,6 @@ char* parse_destination(char* query)
                 char* destination = strtok(path, "?=");
                 destination = strtok(NULL, "?=");
                 destination = strtok(NULL, "?=");
-
-                perror(destination);
-
                 //return the destination if found
                 return destination;
             }
@@ -77,11 +74,11 @@ typedef struct {
     char *latitude;
 
     //all entries of timetable as a dynamic array of strings
-    timetableEntry **timetableEntry;
+    timetableEntry *timetableEntry;
 }Timetable;
 
 //read the file and create the timetable
-Timetable* read_timetable(const char* filename) 
+Timetable read_timetable(const char* filename) 
 {
     //open the file
     FILE* file = fopen(filename, "r");
@@ -91,21 +88,16 @@ Timetable* read_timetable(const char* filename)
     }
 
     //allocate memory for timetable and timetable array
-    Timetable* timetable = malloc(sizeof(Timetable));
-    if (timetable == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
-    timetable->timetableEntry = calloc(1,sizeof(timetableEntry));
-    if (timetable->timetableEntry == NULL) 
+    Timetable timetable;
+    timetable.timetableEntry = calloc(1,sizeof(timetableEntry *));
+    if (timetable.timetableEntry == NULL) 
     { 
         perror("Memory not allocated"); 
         exit(EXIT_FAILURE);
     }
 
     //initialise count
-    timetable->count = 0;
+    timetable.count = 0;
 
     //iterate through each line of the file
     char line[MAX_LINE_LENGTH];
@@ -115,12 +107,7 @@ Timetable* read_timetable(const char* filename)
         if (line[0] != '#') 
         {
             //create new empty entry
-            timetableEntry* entry = malloc(sizeof(timetableEntry));
-            if (entry == NULL) 
-            { 
-                perror("Memory not allocated"); 
-                exit(EXIT_FAILURE);
-            }
+            timetableEntry entry;
 
 
             char* departureInfoParts = strtok(line, ",");
@@ -139,43 +126,51 @@ Timetable* read_timetable(const char* filename)
             while(departureInfoParts != NULL)
             {
                 //move on to next split string
-                departureInfoParts = strtok(NULL, ",");
+                departureInfoParts = strtok(NULL, ",\n");
 
                 //dont include last departureInfoPart as it is the destination
                 if(count < 4)
                 {
-                    departureInfo[count] = departureInfoParts;
-                    char *errormsg2 = (char *)malloc(80);
-                    sprintf(errormsg2,"current part %d: %s",count, departureInfoParts);
-                    perror(errormsg2);
+                    departureInfo[count + 1] = departureInfoParts;
                 }
                 count += 1;
+
+                //last component is destination so copy it in
+                if(count == 4)
+                {
+                    //allocate memory and copy destination into entry
+                    entry.destination = (char *)malloc(strlen(departureInfoParts) + 1);
+                    if (entry.destination == NULL) 
+                    { 
+                        perror("Memory not allocated"); 
+                        exit(EXIT_FAILURE);
+                    }
+                    strcpy(entry.destination,departureInfoParts);
+                }
             }
 
             //if this line contains the departure info it would have 5 components
-            if(count == 4)
+            if(count == 5)
             {
-                //allocate memory and copy destination into entry
-                entry->destination = malloc(sizeof(departureInfoParts));
-                if (entry->destination == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
-                strcpy(entry->destination,departureInfoParts); //last part of split string is always destination
-
                 //store departure info into appropriate array
-                entry->departureInfo = departureInfo;
+                entry.departureInfo = malloc(4 * sizeof(char *));
+                
+                for(int j = 0; j < 4; j++)
+                {
+                    entry.departureInfo[j] = malloc(strlen(departureInfo[j]) + 1);
+                    strcpy(entry.departureInfo[j],departureInfo[j]);
+                }
 
                 //add entry to timetable and resize the array
-                timetable->timetableEntry[timetable->count] = entry;
-                timetable->timetableEntry = (timetableEntry **)realloc(timetable->timetableEntry, (timetable->count + 1) * sizeof(timetableEntry));
-                if (timetable->timetableEntry == NULL) 
+                timetable.timetableEntry = realloc(timetable.timetableEntry, (timetable.count + 1) * sizeof(timetableEntry));
+                if (timetable.timetableEntry == NULL) 
                 { 
                     perror("Memory not allocated"); 
                     exit(EXIT_FAILURE);
                 }
-                timetable->count++;
+
+                timetable.timetableEntry[timetable.count] = entry;
+                timetable.count++;
             }
         }
     }
@@ -185,86 +180,81 @@ Timetable* read_timetable(const char* filename)
     return timetable;
 }
 
-int strptime(const char* timeString, const char* format, struct tm* time) 
+//method to get minutes from %H:%M string format
+int getMins(const char* timeString) 
 {
-    int hour, minute;
-    if (sscanf(timeString, format, &hour, &minute) != 2) 
+    //scan string and add hour and minute to appropriate variables
+    int hour, minutes;
+    if (sscanf(timeString, "%d:%d", &hour, &minutes) != 2) 
     {
-        char *errorMsg = (char *)malloc(strlen("hour : %d, minute %d") + 50);
-        sprintf(errorMsg,"hour : %d, minute %d",hour,minute);
-        perror(errorMsg);  // Error
         exit(EXIT_FAILURE);
     }
 
-    time->tm_hour = hour;
-    time->tm_min = minute;
-
+    //convert hours to minutes
+    int hourToMins = hour * 60;
     
-    char *errorMsg = (char *)malloc(strlen("hour : %d, minute %d") + 50);
-    sprintf(errorMsg,"hour : %d, minute %d",time->tm_hour,time->tm_min);
-    perror(errorMsg);
-    
-    return 0;
+    //return total time in minutes
+    return (hourToMins + minutes);
 }
 
-Timetable *filter_timetable(Timetable* timetable, char* cuttOffTimeStr) 
+Timetable filter_timetable(Timetable timetable, char* cutOffTimeStr) 
 {
-    struct tm cuttOffTime;
-    strptime(cuttOffTimeStr, "%d:%d", &cuttOffTime);
+    //convert the cutt off timeto mins
+    int cutOffTime = getMins(cutOffTimeStr);
 
     //allocate memory for timetable and timetable array
-    Timetable* filteredTimetable = malloc(sizeof(Timetable));
-    if (filteredTimetable == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
-    filteredTimetable->timetableEntry = calloc(1,sizeof(timetableEntry));
-    if (filteredTimetable->timetableEntry == NULL) 
+    Timetable filteredTimetable;
+    filteredTimetable.timetableEntry = calloc(1,sizeof(timetableEntry *));
+    if (filteredTimetable.timetableEntry == NULL) 
     { 
         perror("Memory not allocated"); 
         exit(EXIT_FAILURE);
     }
 
     //initialise count
-    filteredTimetable->count = 0;
+    filteredTimetable.count = 0;
 
     //iterate through each entry in timetable
-    for(int i = 0; i < timetable->count; i++)
+    for(int i = 0; i < timetable.count; i++)
     {
-        timetableEntry *entry = timetable->timetableEntry[i];
+        timetableEntry entry = timetable.timetableEntry[i];
 
-        //assume first element of departure info is departure time
-        char *departureTimeStr = entry->departureInfo[0];
-        struct tm departureTime;
-        strptime(departureTimeStr, "%d:%d",&departureTime);
-        
+        //first element of departure info is departure time
+        char *departureTimeStr = entry.departureInfo[0];
+        int departureTime = getMins(departureTimeStr);
+
         //Compare the departure time with the cutoff time
-        if (mktime(&departureTime) >= mktime(&cuttOffTime))
+        if (departureTime >= cutOffTime)
         {
             //create new empty entry
-            timetableEntry* filteredEntry = malloc(sizeof(timetableEntry));
-            if (filteredEntry == NULL) 
-            { 
-                perror("Memory not allocated"); 
-                exit(EXIT_FAILURE);
-            }
+            timetableEntry filteredEntry;
             
             //copy filtered components into new empty entry
-            filteredEntry->destination = malloc(sizeof(entry->destination));
-            if (filteredEntry->destination == NULL) 
+            filteredEntry.destination = malloc(strlen(entry.destination) + 1);
+            if (filteredEntry.destination == NULL) 
             { 
                 perror("Memory not allocated"); 
                 exit(EXIT_FAILURE);
             }
-            strcpy(filteredEntry->destination,entry->destination);
-            filteredEntry->departureInfo = entry->departureInfo;
+            strcpy(filteredEntry.destination,entry.destination);
 
-            //add entry to filtered timetable and resize
-            filteredTimetable->timetableEntry[filteredTimetable->count] = filteredEntry;
-            filteredTimetable->timetableEntry = (timetableEntry **)realloc(filteredTimetable->timetableEntry, (filteredTimetable->count + 1)*sizeof(timetableEntry));
-            filteredTimetable->count++;
-            
+            filteredEntry.departureInfo = malloc(4*sizeof(char *)); 
+
+            for(int j = 0; j < 4; j++)
+            {
+                filteredEntry.departureInfo[j] = malloc(strlen(entry.departureInfo[j]) + 1);
+                strcpy(filteredEntry.departureInfo[j],entry.departureInfo[j]);
+            }
+
+            //add entry to filtered timetable and resize the array
+            filteredTimetable.timetableEntry = realloc(filteredTimetable.timetableEntry, (filteredTimetable.count + 1) * sizeof(timetableEntry));
+            if (filteredTimetable.timetableEntry == NULL) 
+            { 
+                perror("Memory not allocated"); 
+                exit(EXIT_FAILURE);
+            }
+            filteredTimetable.timetableEntry[filteredTimetable.count] = filteredEntry;
+            filteredTimetable.count++;
         }
     }
 
@@ -326,76 +316,70 @@ char *generate_http_response(int statusCode, char* responseBody)
     return response;
 }
 
-char *find_fastest_route(Timetable *timetable, char *destination, char *after_time_str) 
+char *find_fastest_route(Timetable timetable, char *destination, char *after_time_str) 
 {
     //create and allocate memory for timetable containing entries leading only to destination
-    Timetable *allDestinationTimetable = malloc(sizeof(Timetable));
-    if (allDestinationTimetable == NULL) 
+    Timetable allDestinationTimetable;
+    allDestinationTimetable.timetableEntry = calloc(1,sizeof(timetableEntry));
+    if (allDestinationTimetable.timetableEntry == NULL) 
     { 
         perror("Memory not allocated"); 
         exit(EXIT_FAILURE);
     }
-    allDestinationTimetable->timetableEntry = calloc(1, sizeof(timetableEntry));
-    if (allDestinationTimetable->timetableEntry == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
-    allDestinationTimetable->count = 0;
-
+    allDestinationTimetable.count = 0;
 
     //add all entries which lead to the required destination to newly created timetable
-    for(int i = 0; i < timetable->count; i++)
+    for(int i = 0; i < timetable.count; i++)
     {
-        timetableEntry *entry = timetable->timetableEntry[i];
+        timetableEntry entry = timetable.timetableEntry[i];
 
-        if(strcmp(destination,entry->destination) == 0)
+        if(strcmp(destination,entry.destination) == 0)
         {
-            allDestinationTimetable->timetableEntry[allDestinationTimetable->count] = entry;
-            allDestinationTimetable->timetableEntry = (timetableEntry **)realloc(allDestinationTimetable->timetableEntry, (allDestinationTimetable->count + 1)*sizeof(timetableEntry));
-            if (allDestinationTimetable->timetableEntry == NULL) 
+            //add entry to timetable and resize the array
+            allDestinationTimetable.timetableEntry = realloc(allDestinationTimetable.timetableEntry, (allDestinationTimetable.count + 1) * sizeof(timetableEntry));
+            if (allDestinationTimetable.timetableEntry == NULL) 
             { 
                 perror("Memory not allocated"); 
                 exit(EXIT_FAILURE);
             }
-            allDestinationTimetable->count++;
+            allDestinationTimetable.timetableEntry[allDestinationTimetable.count] = entry;
+            allDestinationTimetable.count++;
         }
     }
 
 
-    //turn after time from string into struct tm object
-    struct tm after_time;
-    strptime(after_time_str, "%d:%d", &after_time);
+    //turn after time into mins
+    int afterTimeMins = getMins(after_time_str);
 
     //initial conditions
-    char* fastestRoute = NULL;
-    double fastestDuration = 0.0;
+    char* fastestRoute;
+    double fastestDuration = 9999999999999999999.9;
 
     //iterate through every destination timetable route
-    for(int i = 0; i < allDestinationTimetable->count; i++)
+    for(int i = 0; i < allDestinationTimetable.count; i++)
     {
-        timetableEntry *entry = allDestinationTimetable->timetableEntry[i];
+        timetableEntry entry = allDestinationTimetable.timetableEntry[i];
 
-        //convert to struct tm objects from string
-        struct tm departureTime, arrivalTime;
-        strptime(entry->departureInfo[0], "%d:%d", &departureTime);
-        strptime(entry->departureInfo[3], "%d:%d", &arrivalTime);
+        //convert to mins
+        int departureTimeMins = getMins(entry.departureInfo[0]);
+        int arrivalTimeMins = getMins(entry.departureInfo[3]);
 
         //calculate duration
-        double duration = difftime(mktime(&departureTime), mktime(&after_time)) + difftime(mktime(&arrivalTime), mktime(&departureTime));
+        double duration = (departureTimeMins - afterTimeMins) + (arrivalTimeMins - departureTimeMins);
 
         //find the fastest route
-        if (fastestRoute == NULL || duration < fastestDuration) 
+        if (duration < fastestDuration) 
         {
-            char *route = malloc(strlen("('', '', '', '')") + strlen(entry->departureInfo[0]) + strlen(entry->departureInfo[1])+ strlen(entry->departureInfo[2])+ strlen(entry->departureInfo[3]));
-            sprintf(route,"('%s', '%s', '%s', '%s')",entry->departureInfo[0],entry->departureInfo[1],entry->departureInfo[2],entry->departureInfo[3]);
-            fastestRoute = malloc(sizeof(route));
+            char *route = malloc(strlen("('', '', '', '')") + strlen(entry.departureInfo[0]) + strlen(entry.departureInfo[1])+ strlen(entry.departureInfo[2])+ strlen(entry.departureInfo[3]));
+            sprintf(route,"('%s', '%s', '%s', '%s')",entry.departureInfo[0],entry.departureInfo[1],entry.departureInfo[2],entry.departureInfo[3]);
+            fastestRoute = malloc(strlen(route) + 1);
             if (fastestRoute == NULL) 
             { 
                 perror("Memory not allocated"); 
                 exit(EXIT_FAILURE);
             }
             strcpy(fastestRoute,route);
+
             fastestDuration = duration;
         }
     }
@@ -424,6 +408,11 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_addr.sin_port = htons(browser_port);
 
+    //read file and get timetable
+    char *filename = malloc(strlen("tt-") + strlen(stationName));
+    sprintf(filename,"tt-%s",stationName);
+    Timetable stationTimetable = read_timetable(filename);
+
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) 
     {
         perror("Bind failed");
@@ -436,11 +425,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         perror("Listen failed");
         exit(EXIT_FAILURE);
     }
-
-    //read file and get timetable
-    char *filename = malloc(strlen("tt-") + strlen(stationName));
-    sprintf(filename,"tt-%s",stationName);
-    Timetable *stationTimetable = read_timetable(filename);
 
     printf("Server started for %s on browser port %d and query port %d\n", stationName, browser_port, query_port);
 
@@ -466,13 +450,13 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         //get the filtered timetable
         char *destination = parse_destination(query);
         char *afterTime = "10:00";
-        Timetable *filteredTimetable = filter_timetable(stationTimetable, afterTime);
-
+        Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
+ 
         //get the fastest route
         char *route = find_fastest_route(filteredTimetable, destination, afterTime);
         
         // Format the response message with the timetable information
-        char *response_body = malloc(strlen("Fastest route to :\n" + strlen(route) +strlen(destination)));
+        char *response_body = malloc(strlen("Fastest route to :\n") + strlen(route) +strlen(destination));
         sprintf(response_body,"Fastest route to %s:\n%s",destination,route);
 
         // Format the HTTP response
