@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/stat.h>
 
 //                cc -std=c11 -Wall -Werror -o station-server station-server.c
 //                  ./assignports.sh adjacency station-server.sh 
@@ -413,6 +414,11 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     sprintf(filename,"tt-%s",stationName);
     Timetable stationTimetable = read_timetable(filename);
 
+    //store initial mtime of file
+    struct stat filestat;
+    stat(filename, &filestat);
+    __time_t last_mtime = filestat.st_mtime;
+
     //get the current time (time the webpage was created) for use in calculations
     time_t rawtime;
     struct tm * currentTime;
@@ -443,6 +449,16 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     while(1) 
     {
+        //restat the file
+        stat(filename, &filestat);
+        //if its been modified, reread the timetable, filter it, and update last_mtime
+        if(filestat.st_mtime != last_mtime) {
+            stationTimetable = read_timetable(filename);
+            filteredTimetable = filter_timetable(stationTimetable, afterTime);
+            last_mtime = filestat.st_mtime;
+            printf("Updated timetable info for %s\n", stationName);
+        }
+
         printf("Waiting for a connection from the web interface...\n");
 
         // Accept a new connection
