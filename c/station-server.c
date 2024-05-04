@@ -110,7 +110,7 @@ Timetable read_timetable(const char* filename)
             timetableEntry entry;
 
 
-            char* departureInfoParts = strtok(line, ",");
+            char *departureInfoParts = strtok(line, ",");
             int count = 0;
 
             if(strlen(departureInfoParts) > 5)
@@ -278,7 +278,7 @@ char *generate_http_response(int statusCode, char* responseBody)
         sprintf(responseBodyLength,"%ld",strlen(responseBody));
 
         //allocate memory for response and write message to it
-        response = malloc(strlen("HTTP/1.1 200 OK\r\nContent-Length: \r\n\r\n") + strlen(responseBody) + strlen(responseBodyLength));
+        response = malloc(strlen("HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n%s") + strlen(responseBody) + strlen(responseBodyLength));
         if (response == NULL) 
         { 
             perror("Memory not allocated"); 
@@ -304,7 +304,7 @@ char *generate_http_response(int statusCode, char* responseBody)
         sprintf(statusCodeStr,"%d",statusCode);
 
         //allocate memory for response and write message to it
-        response = malloc(strlen("HTTP/1.1 \r\nContent-Length: 0\r\n\r\n") + strlen(statusCodeStr));
+        response = malloc(strlen("HTTP/1.1 %d\r\nContent-Length: 0\r\n\r\n") + strlen(statusCodeStr));
         if (response == NULL) 
         { 
             perror("Memory not allocated"); 
@@ -370,7 +370,7 @@ char *find_fastest_route(Timetable timetable, char *destination, char *after_tim
         //find the fastest route
         if (duration < fastestDuration) 
         {
-            char *route = malloc(strlen("('', '', '', '')") + strlen(entry.departureInfo[0]) + strlen(entry.departureInfo[1])+ strlen(entry.departureInfo[2])+ strlen(entry.departureInfo[3]));
+            char *route = malloc(strlen("('%s', '%s', '%s', '%s')") + strlen(entry.departureInfo[0]) + strlen(entry.departureInfo[1])+ strlen(entry.departureInfo[2])+ strlen(entry.departureInfo[3]));
             sprintf(route,"('%s', '%s', '%s', '%s')",entry.departureInfo[0],entry.departureInfo[1],entry.departureInfo[2],entry.departureInfo[3]);
             fastestRoute = malloc(strlen(route) + 1);
             if (fastestRoute == NULL) 
@@ -409,9 +409,22 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     server_addr.sin_port = htons(browser_port);
 
     //read file and get timetable
-    char *filename = malloc(strlen("tt-") + strlen(stationName));
+    char *filename = malloc(strlen("tt-%s") + strlen(stationName));
     sprintf(filename,"tt-%s",stationName);
     Timetable stationTimetable = read_timetable(filename);
+
+    //get the current time (time the webpage was created) for use in calculations
+    time_t rawtime;
+    struct tm * currentTime;
+    time(&rawtime);
+    currentTime = localtime(&rawtime);
+
+    //turn time into string
+    char *afterTime = malloc(strlen(":") + 4);
+    sprintf(afterTime,"%d:%d",currentTime->tm_hour,currentTime->tm_min);
+
+    //get filtered timetable
+    Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
 
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) 
     {
@@ -447,16 +460,26 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         read(new_socket, query, sizeof(query));
         printf("Received query: %s\n", query);
 
-        //get the filtered timetable
+        //parse the destination
         char *destination = parse_destination(query);
-        char *afterTime = "10:00";
-        Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
+        if(destination == NULL)
+        {
+            // Clean up the connection
+            printf("Closed\n");
+            close(new_socket);
+            continue;
+        }
  
         //get the fastest route
         char *route = find_fastest_route(filteredTimetable, destination, afterTime);
         
         // Format the response message with the timetable information
-        char *response_body = malloc(strlen("Fastest route to :\n") + strlen(route) +strlen(destination));
+        char *response_body = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) +strlen(destination));
+        if(response_body == NULL)
+        {
+            perror("memory allocation failed");
+            exit(EXIT_FAILURE);
+        }
         sprintf(response_body,"Fastest route to %s:\n%s",destination,route);
 
         // Format the HTTP response
