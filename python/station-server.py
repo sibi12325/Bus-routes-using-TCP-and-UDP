@@ -4,7 +4,10 @@
 import sys
 import socket
 import datetime
+import select
+import hashlib
 
+IP = 'localhost'
 
 def parse_destination(query):
     # Split the query into lines
@@ -20,23 +23,6 @@ def parse_destination(query):
                 return destination
     # If no destination is found, return None
     return None
-
-def filter_timetable(timetable, cutoff_time_str):
-    # Parse the cutoff time string into a datetime object
-    cutoff_time = datetime.datetime.strptime(cutoff_time_str, '%H:%M')
-
-    filtered_timetable = {}
-    for destination, departures in timetable.items():
-        filtered_departures = []
-        for departure_info in departures:
-            departure_time_str = departure_info[0]  # Assuming departure time is the first element
-            # Parse the departure time string into a datetime object
-            departure_time = datetime.datetime.strptime(departure_time_str, '%H:%M')
-            # Compare the parsed departure time with the cutoff time
-            if departure_time >= cutoff_time:
-                filtered_departures.append(departure_info)
-        filtered_timetable[destination] = filtered_departures
-    return filtered_timetable
 
 def read_timetable(filename):
     timetable = {}
@@ -56,21 +42,16 @@ def read_timetable(filename):
                     else:
                         timetable[destination] = [departure_info]
             line = file.readline()
-    
     return timetable
 
-def generate_http_response(status_code, response_body):
-    if status_code == 200:
-        # OK response
-        response = f"HTTP/1.1 200 OK\r\nContent-Length: {len(response_body)}\r\n\r\n{response_body}"
-    elif status_code == 404:
-        # Not Found response
-        response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
-    else:
-        # Invalid status code
-        response = f"HTTP/1.1 {status_code}\r\nContent-Length: 0\r\n\r\n"
-
+def generate_http_response(body):
+    response = f"HTTP/1.1 200\r\n"
+    response += f"Content-Type: text/html\r\n"
+    response += "Connection: Closed\r\n\r\n"
+    response += f"{body}"
     return response
+
+# def create_response(route):
 
 def find_fastest_route(timetable, destination, after_time_str):
     if destination not in timetable:
@@ -92,67 +73,121 @@ def find_fastest_route(timetable, destination, after_time_str):
         departure_time = datetime.datetime.strptime(entry[0], "%H:%M")
         arrival_time = datetime.datetime.strptime(entry[3], "%H:%M")
         
-        # Calculate the duration of the route, including waiting time
-        duration = departure_time - after_time + (arrival_time - departure_time)
+        if(departure_time > after_time):
+            # Calculate the duration of the route, including waiting time
+            duration = departure_time - after_time + (arrival_time - departure_time)
 
-        # Check if this is the fastest route found so far
-        if fastest_duration is None or duration < fastest_duration:
-            fastest_duration = duration
-            fastest_route = entry
+            # Check if this is the fastest route found so far
+            if fastest_duration is None or duration < fastest_duration:
+                fastest_duration = duration
+                fastest_route = entry
 
     return fastest_route
 
+def handle_tcp_connection(timetable, connection, request):
+    destination = parse_destination(request)
+    current_time = "10:00"
+    if(destination in timetable):
+        route = find_fastest_route(timetable, destination, current_time)
+        response = generate_http_response(route)
+        connection.sendall(response.encode())
+        connection.close()
+        return None
+    else:
+        return destination
 
-def start_server(station_name, browser_port, query_port, neighbors):
-    # Convert neighbor strings to tuples of (hostname, port)
-    neighbors = [neighbor.split(":") for neighbor in neighbors]
+def send_udp(destination, udp_socket, query_port, neighbours):
+
+    for neighbour in neighbours:
+        msg = f"({IP}, {query_port})  {destination}"
+        udp_socket.sendto(msg.encode(), neighbour)
+
+    udp_socket.close()
+
+def calculate_file_hash(file_name):
+    """Calculate the SHA-256 hash of a file."""
+    hasher = hashlib.sha256()
+    with open(file_name, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096), b''):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+def server(station_name, browser_port, query_port, neighbours):
 
     # Convert port numbers to integers
     browser_port = int(browser_port)
     query_port = int(query_port)
 
     # Create a TCP/IP socket for handling queries from the web interface
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('localhost', browser_port))
-    server_socket.listen(5)
+    tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_socket.bind((IP, browser_port))
+    tcp_socket.listen(5)
+    print(f"TCP Server listening on {IP}:{browser_port}")
+        
+    # Create a UDP socket for handling queries from the stations
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket.bind((IP, query_port))
+    print(f"UDP Server listening on {IP}:{query_port}")
 
+    #Read the timetable
     filename = f"tt-{station_name}"
-    station_timetable = read_timetable(filename)
-    print(f"Server started for {station_name} on browser port {browser_port} and query port {query_port}")
-
+    timetable = read_timetable(filename)
+    hash = calculate_file_hash(filename)
+    # Create a poll object
+    poll_object = select.poll()
+    poll_object.register(tcp_socket, select.POLLIN)
+    poll_object.register(udp_socket, select.POLLIN)
     while True:
-        # Wait for a connection from the web interface
-        print("Waiting for a connection from the web interface...")
-        connection, client_address = server_socket.accept()
+        events = poll_object.poll()
+        for fd, event in events:
+            # TCP connection
+            if fd == tcp_socket.fileno() and event & select.POLLIN:
+                connection, address = tcp_socket.accept()
+                request = connection.recv(1024).decode()
+                print(f"New TCP connection from {address}")
+                if(request.startswith("GET")):
+                    #calculate new hash
+                    new_hash = calculate_file_hash(filename)
+                    #if the old hash is different to new hash then update the timetable
+                    if(hash != new_hash):
+                        timetable = read_timetable(filename)
+                        hash = new_hash
+                    #get the destination if the source and destination are not connected
+                    destination = handle_tcp_connection(timetable, connection, request)
+                    if(destination != None):
+                        #send udp to the current stations neighbours
+                        send_udp(destination, udp_socket, query_port, neighbours)
+                    
+            # UDP data
+            elif fd == udp_socket.fileno() and event & select.POLLIN:
+                data, address = udp_socket.recvfrom(1024)
+                print(f"UDP data received from {address}: {data.decode()}")
+                # Handle UDP data
+                parts = data.decode().split("  ")
+                new_hash = calculate_file_hash(filename)
+                if(hash != new_hash):
+                    timetable = read_timetable(filename)
+                    hash = new_hash
+                #If there is route to destination 
+                if(parts[-1] in timetable):
+                    current_time = '10:00'
+                    route = find_fastest_route(timetable, parts[-1], current_time)
+                    msg = f""
+                    udp_socket.sendto(msg.encode(), neighbours[0])
 
-        try:
-            print(f"Connection from {client_address}")
+                # elif(len(data.decode().split()) > 5):
+                #     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                #     tcp_send_back.connect((IP, browser_port))
+                #     response = generate_http_response(data.decode())
+                #     tcp_send_back.sendall(response.encode())
+                #     tcp_send_back.close()
+                    
 
-            # Receive the query from the web interface
-            data = connection.recv(1024)
-            rev_query = data.decode()
-            print(f"recived query: {rev_query}")
 
 
-            # Process the query (you need to implement this part)
-            destination = parse_destination(rev_query)
-            after_time = '10:00'
-            filtered_timetable = filter_timetable(station_timetable, after_time)
-            # Get the timetable entries for the destination
-            route = find_fastest_route(filtered_timetable, destination, after_time)
-            # Format the response message with the timetable information
- 
-            response_body = f"Fastest route to {destination}:\n"
-            response_body += f"{route}"
+    
 
-            # Format the HTTP response
-            response = generate_http_response(200, response_body)
-            # Send the response back to the web interface
-            connection.sendall(response.encode())
-        finally:
-            # Clean up the connection
-            print("Closed")
-            connection.close()
+
 
 if __name__ == "__main__":
     # Check if the correct number of command line arguments are provided
@@ -164,8 +199,11 @@ if __name__ == "__main__":
     station_name = sys.argv[1]
     browser_port = sys.argv[2]
     query_port = sys.argv[3]
-    neighbors = sys.argv[4:]
+    neighbours_l = sys.argv[4:]
 
-    # Start the server with the provided configuration
-    start_server(station_name, browser_port, query_port, neighbors)
+    # Convert neighbors into a list of tuples
+    neighbours = [(neighbour.split(":")[0], int(neighbour.split(":")[1])) for neighbour in neighbours_l]
 
+    # start the server
+    server(station_name, browser_port, query_port, neighbours)
+    
