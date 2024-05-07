@@ -10,6 +10,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/stat.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 //                cc -std=c11 -Wall -Werror -o station-server station-server.c
 //                  ./assignports.sh adjacency station-server.sh 
@@ -353,7 +355,7 @@ char *find_fastest_route(Timetable timetable, char *destination, char *after_tim
     int afterTimeMins = getMins(after_time_str);
 
     //initial conditions
-    char* fastestRoute;
+    char* fastestRoute = NULL;
     double fastestDuration = 9999999999999999999.9;
 
     //iterate through every destination timetable route
@@ -452,64 +454,88 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         //restat the file
         stat(filename, &filestat);
         //if its been modified, reread the timetable, filter it, and update last_mtime
-        if(filestat.st_mtime != last_mtime) {
+        if(filestat.st_mtime != last_mtime) 
+        {
             stationTimetable = read_timetable(filename);
             filteredTimetable = filter_timetable(stationTimetable, afterTime);
             last_mtime = filestat.st_mtime;
             printf("Updated timetable info for %s\n", stationName);
         }
 
-        printf("Waiting for a connection from the web interface...\n");
+        //declare and initialise the readset
+        fd_set readset;
+        FD_CLR(server_socket,&readset);
+        FD_SET(server_socket, &readset);
 
-        // Accept a new connection
-        if ((new_socket = accept(server_socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) 
+        //declare and initialise the timeout value (currently 10 seconds)
+        struct timeval timeout;
+        timeout.tv_sec  = 10;
+        timeout.tv_usec = 0;
+
+        //try and select a server socket (for concurrency)
+        if(select(server_socket + 1, &readset, NULL, NULL, &timeout) >= 0) 
         {
-            perror("Accept failed");
-            exit(EXIT_FAILURE);
-        }
+            if (FD_ISSET(server_socket, &readset)) 
+            {
+                // Accept a new connection
+                if((new_socket = accept(server_socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) 
+                {
+                    perror("Accept failed");
+                    exit(EXIT_FAILURE);
+                }
+                printf("Connection from %s\n", inet_ntoa(client_addr.sin_addr));
+                
+                // Receive the query from the web interface
+                char query[MAX_BUFFER_SIZE];
+                memset(query, 0, sizeof(query));
+                read(new_socket, query, sizeof(query));
+                printf("Received query: %s\n", query);
 
-        printf("Connection from %s\n", inet_ntoa(client_addr.sin_addr));
-
-        // Receive the query from the web interface
-        char query[MAX_BUFFER_SIZE];
-        memset(query, 0, sizeof(query));
-        read(new_socket, query, sizeof(query));
-        printf("Received query: %s\n", query);
-
-        //parse the destination
-        char *destination = parse_destination(query);
-        if(destination == NULL)
-        {
-            // Clean up the connection
-            printf("Closed\n");
-            close(new_socket);
-            continue;
-        }
- 
-        //get the fastest route
-        char *route = find_fastest_route(filteredTimetable, destination, afterTime);
+                //parse the destination
+                char *destination = parse_destination(query);
+                if(destination == NULL)
+                {
+                    // Clean up the connection
+                    printf("Closed\n");
+                    close(new_socket);
+                    continue;
+                }
         
-        // Format the response message with the timetable information
-        char *response_body = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) +strlen(destination));
-        if(response_body == NULL)
-        {
-            perror("memory allocation failed");
-            exit(EXIT_FAILURE);
+                //get the fastest route
+                char *route = find_fastest_route(filteredTimetable, destination, afterTime);
+
+                if(route == NULL)
+                {
+                    route = "NO ROUTE FROM HERE";
+                }
+                
+                // Format the response message with the timetable information
+                char *response_body = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) +strlen(destination));
+                if(response_body == NULL)
+                {
+                    perror("memory allocation failed");
+                    exit(EXIT_FAILURE);
+                }
+                sprintf(response_body,"Fastest route to %s:\n%s",destination,route);
+
+                // Format the HTTP response
+                char* response = generate_http_response(200, response_body);
+
+                // Send the response back to the web interface
+                write(new_socket, response, strlen(response));
+
+                // Clean up the connection
+                printf("Closed\n");
+                close(new_socket);
+            }
+           
         }
-        sprintf(response_body,"Fastest route to %s:\n%s",destination,route);
 
-        // Format the HTTP response
-        char* response = generate_http_response(200, response_body);
-
-        // Send the response back to the web interface
-        write(new_socket, response, strlen(response));
-
-        // Clean up the connection
-        printf("Closed\n");
-        close(new_socket);
     }
-}
 
+    // Close the server socket
+    close(server_socket);
+}
 int main(int argc, char* argv[]) 
 {
     // Check if the correct number of command line arguments are provided
