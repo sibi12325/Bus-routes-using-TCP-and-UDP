@@ -1,5 +1,7 @@
 tt-*
 **/adjacency
 .vscode
+*.sh
+*.html
 station-server
-mywepage.html
+c/station-server
