@@ -1,6 +1,6 @@
 # initialise everything
 
-./buildrandomtimetables 4 # adjust number for timetables amount
+./buildrandomtimetables 3 # adjust number for timetables amount
 
 ./assignports.sh adjacency station-server.sh
 

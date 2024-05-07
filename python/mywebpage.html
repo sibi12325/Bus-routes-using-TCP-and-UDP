@@ -13,49 +13,74 @@ div.box {
 </style>
 
 <div class="box">
-  <h3>&nbsp;Leaving after 13:17</h3>
+  <h3>&nbsp;Leaving after 12:24</h3>
 </div>
 
 <div class="box">
-<form action="http://localhost:6223/">
+<form action="http://localhost:6005/">
   <table>
   <tr>
     <td style="text-align: right;">Leaving from:</td>
-    <td style="text-align: left;">&nbsp;<b>JunctionB</b></td>
-    <td style="padding-left: 3em;"><i>http://localhost:6223/</i></td>
+    <td style="text-align: left;">&nbsp;<b>JunctionC</b></td>
+    <td style="padding-left: 3em;"><i>http://localhost:6005/</i></td>
   </tr>
   <tr>
     <td style="text-align: right;"><label>Destination:</label></td>
     <td><select name="to">
-      <option value='TerminalA'>TerminalA</option>
+      <option value='StationA'>StationA</option>
+      <option value='TerminalB'>TerminalB</option>
     </select></td>
     <td style="padding-left: 3em;"><input type="submit" value=" Let's go! "></td>
   </tr>
   </table>
 <!--
-  <input type="hidden" name="leave" value="13:17">
+  <input type="hidden" name="leave" value="12:24">
 -->
 </form>
 </div>
 
 <div class="box">
-<form action="http://localhost:6222/">
+<form action="http://localhost:6001/">
   <table>
   <tr>
     <td style="text-align: right;">Leaving from:</td>
-    <td style="text-align: left;">&nbsp;<b>TerminalA</b></td>
-    <td style="padding-left: 3em;"><i>http://localhost:6222/</i></td>
+    <td style="text-align: left;">&nbsp;<b>StationA</b></td>
+    <td style="padding-left: 3em;"><i>http://localhost:6001/</i></td>
   </tr>
   <tr>
     <td style="text-align: right;"><label>Destination:</label></td>
     <td><select name="to">
-      <option value='JunctionB'>JunctionB</option>
+      <option value='JunctionC'>JunctionC</option>
+      <option value='TerminalB'>TerminalB</option>
     </select></td>
     <td style="padding-left: 3em;"><input type="submit" value=" Let's go! "></td>
   </tr>
   </table>
 <!--
-  <input type="hidden" name="leave" value="13:17">
+  <input type="hidden" name="leave" value="12:24">
+-->
+</form>
+</div>
+
+<div class="box">
+<form action="http://localhost:6003/">
+  <table>
+  <tr>
+    <td style="text-align: right;">Leaving from:</td>
+    <td style="text-align: left;">&nbsp;<b>TerminalB</b></td>
+    <td style="padding-left: 3em;"><i>http://localhost:6003/</i></td>
+  </tr>
+  <tr>
+    <td style="text-align: right;"><label>Destination:</label></td>
+    <td><select name="to">
+      <option value='JunctionC'>JunctionC</option>
+      <option value='StationA'>StationA</option>
+    </select></td>
+    <td style="padding-left: 3em;"><input type="submit" value=" Let's go! "></td>
+  </tr>
+  </table>
+<!--
+  <input type="hidden" name="leave" value="12:24">
 -->
 </form>
 </div>

@@ -96,13 +96,13 @@ def handle_tcp_connection(timetable, connection, request):
     else:
         return destination
 
-def send_udp(destination, udp_socket, query_port, neighbours):
-
+def send_udp(destination, query_port, neighbours):
+    initial_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     for neighbour in neighbours:
-        msg = f"({IP}, {query_port})  {destination}"
-        udp_socket.sendto(msg.encode(), neighbour)
+        msg = f"M~{IP}|{query_port}~{destination}"
+        initial_udp.sendto(msg.encode(), neighbour)
 
-    udp_socket.close()
+    initial_udp.close()
 
 def calculate_file_hash(file_name):
     """Calculate the SHA-256 hash of a file."""
@@ -156,14 +156,14 @@ def server(station_name, browser_port, query_port, neighbours):
                     destination = handle_tcp_connection(timetable, connection, request)
                     if(destination != None):
                         #send udp to the current stations neighbours
-                        send_udp(destination, udp_socket, query_port, neighbours)
+                        send_udp(destination, query_port, neighbours)
                     
             # UDP data
             elif fd == udp_socket.fileno() and event & select.POLLIN:
                 data, address = udp_socket.recvfrom(1024)
                 print(f"UDP data received from {address}: {data.decode()}")
                 # Handle UDP data
-                parts = data.decode().split("  ")
+                parts = data.decode().split("~")
                 new_hash = calculate_file_hash(filename)
                 if(hash != new_hash):
                     timetable = read_timetable(filename)
