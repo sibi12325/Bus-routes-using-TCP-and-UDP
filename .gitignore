@@ -4,4 +4,7 @@ tt-*
 *.sh
 *.html
 station-server
+c/mywebpage.html
 c/station-server
+c/station-server.sh
+c/stopChanges.sh
