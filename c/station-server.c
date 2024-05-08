@@ -603,7 +603,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 if(route == NULL)
                 {
-                    route = "NO ROUTE FROM HERE";
+                    route = malloc(strlen("there is no journey from %s to %s leaving after %s today") + strlen(stationName) + strlen(destination) + strlen(afterTime));
+                    sprintf(route,"there is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
                 }
                 
                 // Format the response message with the timetable information
