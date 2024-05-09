@@ -1,5 +1,7 @@
 # initialise everything
 
+pkill -f station-server # kill all processes
+
 # cleanup
 find . -name 'tt-*' -exec rm {} \;
 rm python/station-server.sh
