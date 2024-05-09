@@ -86,7 +86,9 @@ def find_fastest_route(timetable, destination, after_time_str):
 
 def handle_tcp_connection(timetable, connection, request):
     destination = parse_destination(request)
-    current_time = "10:00"
+    #current_time = "10:00"
+    now = datetime.now()
+    current_time = now.strftime("%H:%M") # not sure if this works
     if(destination in timetable):
         route = find_fastest_route(timetable, destination, current_time)
         response = generate_http_response(route)
