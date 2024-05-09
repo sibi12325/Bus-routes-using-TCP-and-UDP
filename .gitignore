@@ -5,3 +5,7 @@ c/mywebpage.html
 c/station-server
 c/station-server.sh
 c/stopChanges.sh
+python/adjacency
+python/init.sh
+python/mywebpage.html
+python/station-server.sh
