@@ -85,11 +85,11 @@ def find_fastest_route(timetable, destination, after_time_str):
 
     return fastest_route
 
-def send_udp(client_fd, destination, station_name, neighbours):
+
+def send_udp_own_station(client_fd, destination, station_name, query_port):
     initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    for neighbour in neighbours:
-        msg = f"M~{station_name}~{destination}~{client_fd}"
-        initial_socket.sendto(msg.encode(), neighbour)
+    msg = f"Q~{station_name}~{destination}~{client_fd}"
+    initial_socket.sendto(msg.encode(), (IP, query_port))
     initial_socket.close()
 
 def calculate_file_hash(file_name):
@@ -151,7 +151,8 @@ def server(station_name, browser_port, query_port, neighbours):
                         hash = new_hash
                     #get the destination if the source and destination are not connected
                     destination = parse_destination(request)
-                    current_time = "10:00"
+                    t = time.localtime()
+                    current_time = time.strftime("%H:%M", t)
                     if(destination in timetable):
                         route = find_fastest_route(timetable, destination, current_time)
                         response = generate_http_response(route)
@@ -160,7 +161,10 @@ def server(station_name, browser_port, query_port, neighbours):
                         del client_sockets[client_fd]
                         connection.close()
                     else:
-                        send_udp(client_fd, destination, station_name, neighbours)
+                        # if the station not connected send it udp server of this station
+                        send_udp_own_station(client_fd, destination, station_name, query_port)
+
+                # this will send route to the webpage
                 elif (request.startswith("R")):
                     segment = data.decode().split("~")
                     answer = f"Route to {parts[1]} from {station_name}:\n"
@@ -177,28 +181,49 @@ def server(station_name, browser_port, query_port, neighbours):
             elif fd == udp_socket.fileno() and event & select.POLLIN:
                 data, address = udp_socket.recvfrom(1024)
                 print(f"{station_name} UDP data received from {address}: {data.decode()}")
-                # Handle UDP data
+                # Handle UDP data and split into parts
                 parts = data.decode().split("~")
+
+                # checks to see if the timetable changed or not
                 new_hash = calculate_file_hash(filename)
                 if(hash != new_hash):
                     timetable = read_timetable(filename)
                     hash = new_hash
-                #If there is route to destination 
+
+                #If there is route to destination and sends it back
                 if(parts[0] == "M" and parts[2] in timetable):
-                    current_time = '10:00'
+                    t = time.localtime()
+                    current_time = time.strftime("%H:%M", t)
                     route = find_fastest_route(timetable, parts[2], current_time)
                     msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{route}"
-                    udp_socket.sendto(msg.encode(), neighbours[0])
-
+                    udp_socket.sendto(msg.encode(), address)
+                
+                #this will send msg back to the tcp server
                 elif(parts[0] == "R" and parts[2] == station_name):
                     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     tcp_send_back.connect((IP, browser_port))
                     tcp_send_back.sendall(data)
                     tcp_send_back.close()
+
+                # deals with the query sent from it stations own tcp server and sends to neighbours
+                elif(parts[0] == "Q" and parts[1] == station_name):
+                    ack = False
+                    if ack == True:
+                        msg_type = "A"
+                    else:
+                        msg_type = "M"
+                    msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}"
+                    for neighbour in neighbours:
+                        udp_socket.sendto(msg.encode(), neighbour)
+
+                #if the destination is not in the stations timetable then it send its own neighbours
+                elif(parts[0] == "M" and parts[2] not in timetable):
+                    msg_type = "M"
+                    msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}"
+                    for neighbour in neighbours:
+                        if neighbour != address: #checks to see if neighbour isnt the same as the where msg came from
+                            udp_socket.sendto(msg.encode(), neighbour)
                 
-
-                    
-
 if __name__ == "__main__":
     # Check if the correct number of command line arguments are provided
     if len(sys.argv) < 5:
