@@ -475,6 +475,7 @@ char *get_ip_address()
     close(socket_fd);
 
     return ip;
+}
   
   
 //function to run after all servers are ready
