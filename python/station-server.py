@@ -3,11 +3,13 @@
 
 import sys
 import socket
+import time
 import datetime
 import select
 import hashlib
 
 IP = 'localhost'
+
 
 def parse_destination(query):
     # Split the query into lines
@@ -51,7 +53,6 @@ def generate_http_response(body):
     response += f"{body}"
     return response
 
-# def create_response(route):
 
 def find_fastest_route(timetable, destination, after_time_str):
     if destination not in timetable:
@@ -86,7 +87,8 @@ def find_fastest_route(timetable, destination, after_time_str):
 
 def handle_tcp_connection(timetable, connection, request):
     destination = parse_destination(request)
-    current_time = "10:00"
+    t = time.localtime()
+    current_time = time.strftime("%H:%M", t)
     if(destination in timetable):
         route = find_fastest_route(timetable, destination, current_time)
         response = generate_http_response(route)
@@ -96,13 +98,12 @@ def handle_tcp_connection(timetable, connection, request):
     else:
         return destination
 
-def send_udp(destination, udp_socket, query_port, neighbours):
-
+def send_udp(client_fd, destination, station_name, neighbours):
+    initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     for neighbour in neighbours:
-        msg = f"({IP}, {query_port})  {destination}"
-        udp_socket.sendto(msg.encode(), neighbour)
-
-    udp_socket.close()
+        msg = f"M~{station_name}~{destination}~{client_fd}"
+        initial_socket.sendto(msg.encode(), neighbour)
+    initial_socket.close()
 
 def calculate_file_hash(file_name):
     """Calculate the SHA-256 hash of a file."""
@@ -122,12 +123,12 @@ def server(station_name, browser_port, query_port, neighbours):
     tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_socket.bind((IP, browser_port))
     tcp_socket.listen(5)
-    print(f"TCP Server listening on {IP}:{browser_port}")
+    print(f"{station_name} TCP Server listening on {IP}:{browser_port}")
         
     # Create a UDP socket for handling queries from the stations
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.bind((IP, query_port))
-    print(f"UDP Server listening on {IP}:{query_port}")
+    print(f"{station_name} UDP Server listening on {IP}:{query_port}")
 
     #Read the timetable
     filename = f"tt-{station_name}"
@@ -137,6 +138,10 @@ def server(station_name, browser_port, query_port, neighbours):
     poll_object = select.poll()
     poll_object.register(tcp_socket, select.POLLIN)
     poll_object.register(udp_socket, select.POLLIN)
+
+    #Dictionary of client sockets 
+    client_sockets = {}
+
     while True:
         events = poll_object.poll()
         for fd, event in events:
@@ -145,7 +150,12 @@ def server(station_name, browser_port, query_port, neighbours):
                 connection, address = tcp_socket.accept()
                 request = connection.recv(1024).decode()
                 print(f"New TCP connection from {address}")
+
                 if(request.startswith("GET")):
+                    # Store the client socket and its file descriptor in the dictionary
+                    client_fd = connection.fileno()
+                    client_sockets[client_fd] = connection
+                    print(client_sockets)
                     #calculate new hash
                     new_hash = calculate_file_hash(filename)
                     #if the old hash is different to new hash then update the timetable
@@ -156,31 +166,36 @@ def server(station_name, browser_port, query_port, neighbours):
                     destination = handle_tcp_connection(timetable, connection, request)
                     if(destination != None):
                         #send udp to the current stations neighbours
-                        send_udp(destination, udp_socket, query_port, neighbours)
+                        send_udp(client_fd, destination, station_name, neighbours)
                     
             # UDP data
             elif fd == udp_socket.fileno() and event & select.POLLIN:
                 data, address = udp_socket.recvfrom(1024)
-                print(f"UDP data received from {address}: {data.decode()}")
+                print(f"{station_name} UDP data received from {address}: {data.decode()}")
                 # Handle UDP data
-                parts = data.decode().split("  ")
+                parts = data.decode().split("~")
                 new_hash = calculate_file_hash(filename)
                 if(hash != new_hash):
                     timetable = read_timetable(filename)
                     hash = new_hash
                 #If there is route to destination 
-                if(parts[-1] in timetable):
+                if(parts[0] == "M" and parts[2] in timetable):
                     current_time = '10:00'
-                    route = find_fastest_route(timetable, parts[-1], current_time)
-                    msg = f""
+                    route = find_fastest_route(timetable, parts[2], current_time)
+                    msg = f"R~{station_name}~{parts[2]}~{parts[3]}~{route}"
                     udp_socket.sendto(msg.encode(), neighbours[0])
 
-                # elif(len(data.decode().split()) > 5):
-                #     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                #     tcp_send_back.connect((IP, browser_port))
-                #     response = generate_http_response(data.decode())
-                #     tcp_send_back.sendall(response.encode())
-                #     tcp_send_back.close()
+                elif(parts[0] == "R" and parts[2] == station_name):
+                    print(client_sockets.keys())
+                    # # Send the route back to the tcp of this station
+                    # tcp_sendback = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    # # answer = f"Route to {parts[2]} from {parts[1]}:\n"
+                    # # answer += f"{parts[-1]}"
+                    # # response = generate_http_response(answer)
+                    # tcp_sendback.connect((IP, browser_port))
+                    # tcp_sendback.sendall(data)
+                    # tcp_sendback.close()
+
                     
 
 
