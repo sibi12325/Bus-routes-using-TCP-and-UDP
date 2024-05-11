@@ -586,7 +586,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     int neighbours_len = 0;
     Station* neighbours_dict = malloc(neighbours_len * sizeof(Station));
 
-    //TODO get ip address of server, defaults to localhost (aka 127.0.0.1) for now
     char* IPaddress = get_ip_address();
     char* i_message = malloc(5 + strlen(stationName) + strlen(IPaddress) + 4);
     if (i_message == NULL) {malloc_error();}
@@ -761,10 +760,10 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     }
 
                     datagramParts = strtok(NULL, "~");
-                    char *journeyPorts = malloc(strlen(datagramParts) + 1);
-                    if (journeyPorts == NULL) {malloc_error();}
-                    strcpy(journeyPorts,datagramParts);
-                    //add current port to journey ports -- TODO
+                    char *journey = malloc(strlen(datagramParts) + 1);
+                    if (journey == NULL) {malloc_error();}
+                    strcpy(journey, datagramParts);
+                    //add current station name to journey -- TODO
 
                     datagramParts = strtok(NULL, "~");
                     char *currentTime = malloc(strlen(datagramParts) + 1);
