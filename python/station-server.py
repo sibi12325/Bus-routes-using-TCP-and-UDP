@@ -154,15 +154,17 @@ def server(station_name, browser_port, query_port, neighbours):
                     t = time.localtime()
                     current_time = time.strftime("%H:%M", t)
                     if(destination in timetable):
+                        # if the station is connected send the route back to the webpage
                         route = find_fastest_route(timetable, destination, current_time)
                         response = generate_http_response(route)
                         connection.sendall(response.encode())
                         poll_object.unregister(connection)
                         del client_sockets[client_fd]
                         connection.close()
-                    else:
+                    elif(destination is not None):
                         # if the station not connected send it udp server of this station
                         send_udp_own_station(client_fd, destination, station_name, query_port)
+                        
 
                 # this will send route to the webpage
                 elif (request.startswith("R")):
