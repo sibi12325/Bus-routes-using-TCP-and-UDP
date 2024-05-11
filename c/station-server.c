@@ -3,16 +3,18 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <netdb.h>
 #include <time.h>
 #include <errno.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 //                cc -std=c11 -Wall -Werror -o station-server station-server.c
 //                  ./assignports.sh adjacency station-server.sh 
@@ -407,6 +409,21 @@ char *find_fastest_route(Timetable allDestinationTimetable,char *after_time_str)
     return fastestRoute;
 }
 
+//declare UDP socket earlier for this function
+int udpServerSocket;
+
+//method to send a single UDP message
+void send_a_udp_message(char* message, char* address_port) {
+    char* address = strtok(address_port, ":");
+    struct sockaddr_in destination;
+    destination.sin_family = AF_INET;
+    destination.sin_addr.s_addr = inet_addr(address);
+    address = strtok(NULL, ":");
+    destination.sin_port = htons(atoi(address));
+
+    sendto(udpServerSocket, message, strlen(message), 0, (const struct sockaddr*)&destination, sizeof(destination));
+}
+
 #define MAX_BUFFER_SIZE 1024
 
 void start_server(char* stationName, int browser_port, int query_port, char** neighbors, int num_neighbors) 
@@ -450,7 +467,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
 
     //declare variables required for tcp and udp
-    int tcpServerSocket, newSocket, udpServerSocket;
+    int tcpServerSocket, newSocket; //udpsocket declared earlier
     struct sockaddr_in tcp_server_addr, udp_server_addr, client_addr;
     socklen_t addr_len = sizeof(struct sockaddr_in);
     int numbytes;
@@ -503,8 +520,12 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     printf("Server started for %s on browser port %d and query port %d\n", stationName, browser_port, query_port);
 
-    //TODO get ip address
-    char* IPaddress = "localhost";
+    //initialise array for neighbouring stations
+    int neighbours_len = 0;
+    Station* neighbours_dict = malloc(neighbours_len * sizeof(Station));
+
+    //TODO get ip address of server, defaults to localhost (aka 127.0.0.1) for now
+    char* IPaddress = "127.0.0.1";
 
     char* i_message = malloc(5 + strlen(stationName) + strlen(IPaddress) + 4);
     if (i_message == NULL) {malloc_error();}
@@ -512,8 +533,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     //send identifying message to all neighbours
     for (int i = 0; i < num_neighbors; i++) {
-        //TODO send i_message to all neighbours as udp message
-        printf("Sent %s to %s\n", i_message, neighbors[i]);
+        send_a_udp_message(i_message, neighbors[i]);
+        printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
     }
 
     //used for select
@@ -571,8 +592,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 char query[MAX_BUFFER_SIZE];
                 memset(query, 0, sizeof(query));
                 read(newSocket, query, sizeof(query));
+                //cut TCP query down to just the first line
                 char* cut_query = strtok(query, "\n");
-                printf("%s received query: %s\n", stationName, cut_query);
+                printf("    %s: Received TCP, %s\n", stationName, cut_query);
 
                 //parse the destination
                 char *destination = parse_destination(query);
@@ -643,79 +665,112 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 // turn datagram into string
                 udpDatagram[numbytes] = '\0';
-                printf("Received UDP data: %s\n", udpDatagram);
+                printf("    %s: Received UDP, %s\n", stationName, udpDatagram);
 
                 //get components from datagram
-                char *datagramParts = strtok(udpDatagram,"~");
+                char *datagramParts = strtok(udpDatagram, "~");
                 char *messageType = malloc(strlen(datagramParts) + 1);
                 if (messageType == NULL) {malloc_error();}
-                strcpy(messageType,datagramParts);
+                strcpy(messageType, datagramParts);
 
-                if(strcmp(messageType,"M"))
+                //M, for message, message sent from source to destination
+                //format: M~source_station_name~destination_station_name~time~timetolive~route~journey
+                //route is the list of bus/train routes to deliver to the user
+                //journey is the list of station servers visited by the packet
+                if(strcmp(messageType, "M") == 0)
+                {
+                    datagramParts = strtok(NULL, "~");
+                    char *sourceStation = malloc(strlen(datagramParts) + 1);
+                    if (sourceStation == NULL) {malloc_error();}
+                    strcpy(sourceStation,datagramParts);
+
+                    datagramParts = strtok(NULL, "~");
+                    char *destStation = malloc(strlen(datagramParts) + 1);
+                    if (destStation == NULL) {malloc_error();}
+                    strcpy(destStation,datagramParts);
+
+                    //if the destination is reached
+                    if(strcmp(destStation,stationName))
+                    {
+                        //TODO
+                    }
+
+                    datagramParts = strtok(NULL, "~");
+                    char *journeyPorts = malloc(strlen(datagramParts) + 1);
+                    if (journeyPorts == NULL) {malloc_error();}
+                    strcpy(journeyPorts,datagramParts);
+                    //add current port to journey ports -- TODO
+
+                    datagramParts = strtok(NULL, "~");
+                    char *currentTime = malloc(strlen(datagramParts) + 1);
+                    if (currentTime == NULL) {malloc_error();}
+                    strcpy(currentTime,datagramParts);
+                    //send datagram out to all neighbours after this time --TODO
+
+                    datagramParts = strtok(NULL, "~");
+                    char *timeToLiveStr = malloc(strlen(datagramParts) + 1);
+                    if (timeToLiveStr == NULL) {malloc_error();}
+                    strcpy(timeToLiveStr,datagramParts);
+                    int timeToLive = atoi(timeToLiveStr);
+                    if(timeToLive == 0)
+                    {
+                        //DROP PACKET
+                    }
+                    timeToLive--;
+
+                    datagramParts = strtok(NULL, "~");
+                    char *routeSoFar = malloc(strlen(datagramParts) + 1);
+                    if (routeSoFar == NULL) {malloc_error();}
+                    strcpy(routeSoFar,datagramParts);
+                }
+
+                //A, for acknowledgements
+                //format: A
+                if(strcmp(messageType,"A") == 0)
                 {
                     //TODO
                 }
 
-                if(strcmp(messageType,"A"))
-                {
-                    //TODO
-                }
-
+                //R, for response, message sent from destination back to source
+                //format: R~route~journey
+                //route is the list of bus/train routes to deliver to the user
+                //journey is the list of station servers visited by the packet
+                //packet will reuse journey in reverse to trace steps back
                 if(strcmp(messageType,"R"))
                 {
                     //TODO
                 }
 
-                //I, for initialise, sends name and IP to neighbouring servers on startup
-                if(strcmp(messageType,"I"))
+                //I, for initialise, sends name, IP and address to neighbouring servers on startup
+                //format: I~name~address~port
+                if(strcmp(messageType, "I") == 0)
                 {
-                    //TODO
+                    //expand neighbours dict array
+                    neighbours_dict = realloc(neighbours_dict, (neighbours_len + 1) * sizeof(Station));
+                    if (neighbours_dict == NULL) {malloc_error();}
+
+                    //get name
+                    datagramParts = strtok(NULL,"~");
+                    neighbours_dict[neighbours_len].name = malloc(strlen(datagramParts) + 1);
+                    if (neighbours_dict[neighbours_len].name == NULL) {malloc_error();}
+                    strcpy(neighbours_dict[neighbours_len].name, datagramParts);
+
+                    //get address
+                    datagramParts = strtok(NULL,"~");
+                    neighbours_dict[neighbours_len].address = malloc(strlen(datagramParts) + 1);
+                    if (neighbours_dict[neighbours_len].address == NULL) {malloc_error();}
+                    strcpy(neighbours_dict[neighbours_len].address, datagramParts);
+
+                    //get port
+                    datagramParts = strtok(NULL,"~");
+                    neighbours_dict[neighbours_len].port = atoi(datagramParts);
+
+                    printf("    %s: Added to neighbours_dict %s = %s:%i\n", stationName, neighbours_dict[neighbours_len].name, 
+                    neighbours_dict[neighbours_len].address, neighbours_dict[neighbours_len].port);
+                    
+                    //increment length of array
+                    neighbours_len++;
                 }
-
-
-                datagramParts = strtok(NULL,"~");
-                char *sourceStation = malloc(strlen(datagramParts) + 1);
-                if (sourceStation == NULL) {malloc_error();}
-                strcpy(sourceStation,datagramParts);
-
-                datagramParts = strtok(NULL,"~");
-                char *destStation = malloc(strlen(datagramParts) + 1);
-                if (destStation == NULL) {malloc_error();}
-                strcpy(destStation,datagramParts);
-
-                //if the destination is reached
-                if(strcmp(destStation,stationName))
-                {
-                    //TODO
-                }
-
-                datagramParts = strtok(NULL,"~");
-                char *journeyPorts = malloc(strlen(datagramParts) + 1);
-                if (journeyPorts == NULL) {malloc_error();}
-                strcpy(journeyPorts,datagramParts);
-                //add current port to journey ports -- TODO
-
-                datagramParts = strtok(NULL,"~");
-                char *currentTime = malloc(strlen(datagramParts) + 1);
-                if (currentTime == NULL) {malloc_error();}
-                strcpy(currentTime,datagramParts);
-                //send datagram out to all neighbours after this time --TODO
-
-                datagramParts = strtok(NULL,"~");
-                char *timeToLiveStr = malloc(strlen(datagramParts) + 1);
-                if (timeToLiveStr == NULL) {malloc_error();}
-                strcpy(timeToLiveStr,datagramParts);
-                int timeToLive = atoi(timeToLiveStr);
-                if(timeToLive == 0)
-                {
-                    //DROP PACKET
-                }
-                timeToLive--;
-
-                datagramParts = strtok(NULL,"~");
-                char *routeSoFar = malloc(strlen(datagramParts) + 1);
-                if (routeSoFar == NULL) {malloc_error();}
-                strcpy(routeSoFar,datagramParts);
 
             }
            
@@ -744,21 +799,13 @@ int main(int argc, char* argv[])
     char** neighbors = calloc(1,sizeof(char *));
 
     //can have many neighbors so add all command line arguments after 3 into neighbors
-    if(neighbors == NULL) 
-    {
-        perror("allocation failed");
-        exit(EXIT_FAILURE);
-    }
+    if(neighbors == NULL) {malloc_error();}
     int count = 0;
     for(int i = 4; i < argc; i++)
     {
         neighbors[count] = argv[i];
         neighbors = (char **)realloc(neighbors, (count + 1)*sizeof(char *));
-        if(neighbors == NULL) 
-        {
-            perror("allocation failed");
-            exit(EXIT_FAILURE);
-        }
+        if(neighbors == NULL) {malloc_error();}
         count++;
     }
 

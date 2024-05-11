@@ -68,7 +68,7 @@ build_sed() {
 	    break
 	done
     done < $TMPB
-    SED="$SED -e \"s,^,$MYSERVER ,\" -e 's/\$/ \&/' -e 's/ \([0-9]\)/ localhost:\1/g' -e 's/XXX//g'"
+    SED="$SED -e \"s,^,$MYSERVER ,\" -e 's/\$/ \&/' -e 's/ \([0-9]\)/ 127.0.0.1:\1/g' -e 's/XXX//g'"
 }
 
 # ---------------------------------------
