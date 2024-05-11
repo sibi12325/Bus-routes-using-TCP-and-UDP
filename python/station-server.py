@@ -3,6 +3,7 @@
 
 import sys
 import socket
+import time
 import datetime
 import select
 import hashlib
@@ -88,7 +89,8 @@ def find_fastest_route(timetable, destination, after_time_str):
 
 def handle_tcp_connection(timetable, connection, request):
     destination = parse_destination(request)
-    current_time = "10:00"
+    t = time.localtime()
+    current_time = time.strftime("%H:%M", t)
     if(destination in timetable):
         route = find_fastest_route(timetable, destination, current_time)
         response = generate_http_response(route)
