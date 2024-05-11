@@ -3,7 +3,7 @@
 # written by Chris.McDonald@uwa.edu.au
 # thanks to:  https://en.clipdealer.com/vector/media/A:112583666
 
-HOST="127.0.0.1"	# assuming all stations on the same host
+HOST=$(/sbin/ip -o -4 addr list eth0 | awk '{print $4}' | cut -d/ -f1) #gets ipv4 address
 LEAVE=`date '+%H:%M'`	# or set to a fixed value
 
 # ---------------------------------------

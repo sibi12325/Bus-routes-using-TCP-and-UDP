@@ -68,7 +68,8 @@ build_sed() {
 	    break
 	done
     done < $TMPB
-    SED="$SED -e \"s,^,$MYSERVER ,\" -e 's/\$/ \&/' -e 's/ \([0-9]\)/ 127.0.0.1:\1/g' -e 's/XXX//g'"
+	IPV4=$(/sbin/ip -o -4 addr list eth0 | awk '{print $4}' | cut -d/ -f1)
+    SED="$SED -e \"s,^,$MYSERVER ,\" -e 's/\$/ \&/' -e 's/ \([0-9]\)/ $IPV4:\1/g' -e 's/XXX//g'"
 }
 
 # ---------------------------------------

@@ -413,13 +413,12 @@ char *find_fastest_route(Timetable allDestinationTimetable,char *after_time_str)
 int udpServerSocket;
 
 //method to send a single UDP message
-void send_a_udp_message(char* message, char* address_port) {
-    char* address = strtok(address_port, ":");
+void send_a_udp_message(char* message, char* address, int port) {
     struct sockaddr_in destination;
     destination.sin_family = AF_INET;
     destination.sin_addr.s_addr = inet_addr(address);
     address = strtok(NULL, ":");
-    destination.sin_port = htons(atoi(address));
+    destination.sin_port = htons(port);
 
     sendto(udpServerSocket, message, strlen(message), 0, (const struct sockaddr*)&destination, sizeof(destination));
 }
@@ -597,7 +596,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     printf("Sending identification messages from %s\n", stationName);
     for (int i = 0; i < num_neighbors; i++) {
         printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
-        send_a_udp_message(i_message, neighbors[i]);
+        char* address = strtok(neighbors[i], ":");
+        int port = atoi(strtok(NULL, ":"));
+        send_a_udp_message(i_message, address, port);
     }
 
     //used for select
@@ -821,16 +822,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                     //get address
                     datagramParts = strtok(NULL,"~");
-                    if(strcmp(datagramParts,IPaddress) == 0)
-                    {
-                        neighbours_dict[neighbours_len].address = "127.0.0.1";
-                    }
-                    else
-                    {
-                        neighbours_dict[neighbours_len].address = malloc(strlen(datagramParts) + 1);
-                        if (neighbours_dict[neighbours_len].address == NULL) {malloc_error();}
-                        strcpy(neighbours_dict[neighbours_len].address, datagramParts);
-                    }
+                    neighbours_dict[neighbours_len].address = malloc(strlen(datagramParts) + 1);
+                    if (neighbours_dict[neighbours_len].address == NULL) {malloc_error();}
+                    strcpy(neighbours_dict[neighbours_len].address, datagramParts);
 
                     //get port
                     datagramParts = strtok(NULL,"~");
