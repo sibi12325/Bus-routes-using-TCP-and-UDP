@@ -1,10 +1,7 @@
+.vscode
 tt-*
 **/adjacency
-.vscode
-c/mywebpage.html
-c/station-server
-c/station-server.sh
-c/stopChanges.sh
-python/adjacency
-python/mywebpage.html
-python/station-server.sh
+**/mywebpage.html
+**/station-server
+**/station-server.sh
+**/stopChanges.sh
