@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -609,10 +610,28 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     close(newSocket);
                     continue;
                 }
-        
+
                 //get the fastest route
                 Timetable destinationTimetable = destination_timetable(filteredTimetable,destination);
-                char *route = find_fastest_route(destinationTimetable, afterTime);
+                char* route = find_fastest_route(destinationTimetable, afterTime);
+
+                bool neighbours_destination = false;
+                //iterate through the unfiltered timetable
+                for (int i = 0; i < stationTimetable.count; i++) {
+                    //if queried destination is in the timetable
+                    if (strcmp(destination, stationTimetable.timetableEntry[i].destination) == 0) {
+                        neighbours_destination = true;
+                    }
+                }
+
+                //if station does not neighbour the destination, send out UDP request
+                if (!neighbours_destination) {
+                    //TODO send UDP request to other stations here
+
+                    //temp, will just report it
+                    route = malloc(strlen("%s does not neighbour %s") + strlen(stationName) + strlen(destination));
+                    sprintf(route,"%s does not neighbour %s", stationName, destination);
+                }
 
                 if(route == NULL)
                 {
