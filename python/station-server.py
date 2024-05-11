@@ -85,19 +85,6 @@ def find_fastest_route(timetable, destination, after_time_str):
 
     return fastest_route
 
-def handle_tcp_connection(timetable, connection, request):
-    destination = parse_destination(request)
-    t = time.localtime()
-    current_time = time.strftime("%H:%M", t)
-    if(destination in timetable):
-        route = find_fastest_route(timetable, destination, current_time)
-        response = generate_http_response(route)
-        connection.sendall(response.encode())
-        connection.close()
-        return None
-    else:
-        return destination
-
 def send_udp(client_fd, destination, station_name, neighbours):
     initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     for neighbour in neighbours:
@@ -155,7 +142,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     # Store the client socket and its file descriptor in the dictionary
                     client_fd = connection.fileno()
                     client_sockets[client_fd] = connection
-                    print(client_sockets)
+                    poll_object.register(connection, select.POLLOUT)
                     #calculate new hash
                     new_hash = calculate_file_hash(filename)
                     #if the old hash is different to new hash then update the timetable
@@ -163,10 +150,28 @@ def server(station_name, browser_port, query_port, neighbours):
                         timetable = read_timetable(filename)
                         hash = new_hash
                     #get the destination if the source and destination are not connected
-                    destination = handle_tcp_connection(timetable, connection, request)
-                    if(destination != None):
-                        #send udp to the current stations neighbours
+                    destination = parse_destination(request)
+                    current_time = "10:00"
+                    if(destination in timetable):
+                        route = find_fastest_route(timetable, destination, current_time)
+                        response = generate_http_response(route)
+                        connection.sendall(response.encode())
+                        poll_object.unregister(connection)
+                        del client_sockets[client_fd]
+                        connection.close()
+                    else:
                         send_udp(client_fd, destination, station_name, neighbours)
+                elif (request.startswith("R")):
+                    segment = data.decode().split("~")
+                    answer = f"Route to {parts[1]} from {station_name}:\n"
+                    answer += f"{parts[-1]}"
+                    reply = generate_http_response(answer)
+                    client_socket = client_sockets.get(int(segment[3]))
+                    client_socket.sendall(reply.encode())
+                    poll_object.unregister(client_socket)
+                    del client_sockets[int(segment[3])]
+                    client_socket.close()
+                    
                     
             # UDP data
             elif fd == udp_socket.fileno() and event & select.POLLIN:
@@ -182,27 +187,17 @@ def server(station_name, browser_port, query_port, neighbours):
                 if(parts[0] == "M" and parts[2] in timetable):
                     current_time = '10:00'
                     route = find_fastest_route(timetable, parts[2], current_time)
-                    msg = f"R~{station_name}~{parts[2]}~{parts[3]}~{route}"
+                    msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{route}"
                     udp_socket.sendto(msg.encode(), neighbours[0])
 
                 elif(parts[0] == "R" and parts[2] == station_name):
-                    print(client_sockets.keys())
-                    # # Send the route back to the tcp of this station
-                    # tcp_sendback = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    # # answer = f"Route to {parts[2]} from {parts[1]}:\n"
-                    # # answer += f"{parts[-1]}"
-                    # # response = generate_http_response(answer)
-                    # tcp_sendback.connect((IP, browser_port))
-                    # tcp_sendback.sendall(data)
-                    # tcp_sendback.close()
+                    tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    tcp_send_back.connect((IP, browser_port))
+                    tcp_send_back.sendall(data)
+                    tcp_send_back.close()
+                
 
                     
-
-
-
-    
-
-
 
 if __name__ == "__main__":
     # Check if the correct number of command line arguments are provided
