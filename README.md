@@ -36,14 +36,14 @@ preview md in vscode: `ctrl+shift+v` • md formatting: https://www.markdownguid
 - [ ] Python: Be able to handle multiple outgoing requests at once
 
 ## C TODO:
-- [ ] C: TCP connection to client
-- [ ] C: UDP connection to another server
-- [ ] C: Read/Store/Update station timetables <--- Get to here by week 10
-- [ ] C: Implement a protocol for communication <--- Discuss this week 10 meeting
+- [X] C: TCP connection to client
+- [X] C: UDP connection to another server
+- [X] C: Read/Store/Update station timetables 
+- [X] C: Implement a protocol for communication 
 - [ ] C: Convert client requests to server format
 - [ ] C: Convert server responses to client format
 - [ ] C: Communicate between multiple computers
-- [ ] C: Find valid, one distance, route
+- [X] C: Find valid, one distance, route
 - [ ] C: Find valid, multi stop, routes
 - [ ] C: Find valid routes with cycles present
 - [ ] C: Find non-valid routes
