@@ -471,7 +471,19 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     //turn time into string
     char *afterTime = malloc(strlen(":") + 4);
-    sprintf(afterTime,"%d:%d",currentTime->tm_hour,currentTime->tm_min);
+    char *hour = malloc(3);
+    char *minute = malloc(3);
+    //add padding 0 if hour or minute < 10
+    if (currentTime->tm_hour < 10) {
+        sprintf (hour, "%02d", currentTime->tm_hour);
+    } else {
+        sprintf (hour, "%d", currentTime->tm_hour);
+    } if (currentTime->tm_min < 10) {
+        sprintf (minute, "%02d", currentTime->tm_min);
+    } else {
+        sprintf (minute, "%d", currentTime->tm_min);
+    }
+    sprintf(afterTime,"%s:%s",hour, minute);
 
     //get filtered timetable
     Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
@@ -536,7 +548,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     while(1) 
     {
-        //restat the file
+        //restat the timetable file
         stat(filename, &filestat);
         //if its been modified, reread the timetable, filter it, and update last_mtime
         if(filestat.st_mtime != last_mtime) 
@@ -579,20 +591,21 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     perror("Accept failed");
                     exit(EXIT_FAILURE);
                 }
-                printf("Connection from %s\n", inet_ntoa(client_addr.sin_addr));
+                printf("Connection from %s to %s\n", inet_ntoa(client_addr.sin_addr), stationName);
                 
                 // Receive the query from the web interface
                 char query[MAX_BUFFER_SIZE];
                 memset(query, 0, sizeof(query));
                 read(newSocket, query, sizeof(query));
-                printf("Received query: %s\n", query);
+                char* cut_query = strtok(query, "\n");
+                printf("%s received query: %s\n", stationName, cut_query);
 
                 //parse the destination
                 char *destination = parse_destination(query);
                 if(destination == NULL)
                 {
                     // Clean up the connection
-                    printf("Closed\n");
+                    printf("Closed due to null destination\n");
                     close(newSocket);
                     continue;
                 }
@@ -603,15 +616,15 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 if(route == NULL)
                 {
-                    route = malloc(strlen("there is no journey from %s to %s leaving after %s today") + strlen(stationName) + strlen(destination) + strlen(afterTime));
-                    sprintf(route,"there is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
+                    route = malloc(strlen("There is no journey from %s to %s leaving after %s today") + strlen(stationName) + strlen(destination) + strlen(afterTime));
+                    sprintf(route,"There is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
                 }
                 
                 // Format the response message with the timetable information
                 char *responseBody = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) +strlen(destination));
                 if(responseBody == NULL)
                 {
-                    perror("memory allocation failed");
+                    perror("Memory allocation failed");
                     exit(EXIT_FAILURE);
                 }
                 sprintf(responseBody,"Fastest route to %s:\n%s",destination,route);
@@ -623,7 +636,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 write(newSocket, response, strlen(response));
 
                 // Clean up the connection
-                printf("Closed\n");
+                printf("Closed after finding route\n");
                 close(newSocket);
             }
 
