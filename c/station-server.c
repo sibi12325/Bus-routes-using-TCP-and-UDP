@@ -424,6 +424,58 @@ void send_a_udp_message(char* message, char* address_port) {
     sendto(udpServerSocket, message, strlen(message), 0, (const struct sockaddr*)&destination, sizeof(destination));
 }
 
+char *get_ip_address() 
+{
+    int socket_fd;
+    struct sockaddr_in server_addr;
+    
+    //ip address has 15 characters + 1 for the null terminating character
+    char *ip = malloc(16);
+    if (ip == NULL) {malloc_error();}
+
+    //Create a udp socket
+    if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
+    {
+        perror("socket error\n");
+        exit(EXIT_FAILURE);
+    }
+
+    //ipv4 family
+    server_addr.sin_family = AF_INET;
+
+    //choose arbitrary port (I chose 9999 to avoid conflicts)
+    server_addr.sin_port = htons(9999);
+
+    //ip address is 8.8.8.8 (a public Google DNS server). Use this to avoid loopback interface (eg if something like 0.0.0.0 was chosen, ip address would become 127.0.0.1 instead) 
+    //inet_pton converts the string "8.8.8.8" into a struct in_addr object and stores it in server_addr
+    inet_pton(AF_INET, "8.8.8.8", &(server_addr.sin_addr));
+
+    //connects the socket to the server. It doesn’t send any data but it initialises the server_addr.
+    if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) 
+    {
+        perror("connection error\n");
+        close(socket_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    //gets the local ip address.
+    socklen_t length = sizeof(server_addr);
+    if (getsockname(socket_fd, (struct sockaddr*)&server_addr, &length) < 0) 
+    {
+        perror("getsockname error\n");
+        close(socket_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    //store the human readable format of ip into the ip variable
+    inet_ntop(AF_INET, &(server_addr.sin_addr), ip, 16);
+
+    //close the socket
+    close(socket_fd);
+
+    return ip;
+}
+
 #define MAX_BUFFER_SIZE 1024
 
 void start_server(char* stationName, int browser_port, int query_port, char** neighbors, int num_neighbors) 
@@ -525,8 +577,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     Station* neighbours_dict = malloc(neighbours_len * sizeof(Station));
 
     //TODO get ip address of server, defaults to localhost (aka 127.0.0.1) for now
-    char* IPaddress = "127.0.0.1";
-
+    char* IPaddress = get_ip_address();
     char* i_message = malloc(5 + strlen(stationName) + strlen(IPaddress) + 4);
     if (i_message == NULL) {malloc_error();}
     sprintf(i_message, "I~%s~%s~%i", stationName, IPaddress, query_port);
@@ -617,6 +668,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //if queried destination is in the timetable
                     if (strcmp(destination, stationTimetable.timetableEntry[i].destination) == 0) {
                         neighbours_destination = true;
+                        break;
                     }
                 }
 
@@ -757,9 +809,16 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                     //get address
                     datagramParts = strtok(NULL,"~");
-                    neighbours_dict[neighbours_len].address = malloc(strlen(datagramParts) + 1);
-                    if (neighbours_dict[neighbours_len].address == NULL) {malloc_error();}
-                    strcpy(neighbours_dict[neighbours_len].address, datagramParts);
+                    if(strcmp(datagramParts,IPaddress) == 0)
+                    {
+                        neighbours_dict[neighbours_len].address = "127.0.0.1";
+                    }
+                    else
+                    {
+                        neighbours_dict[neighbours_len].address = malloc(strlen(datagramParts) + 1);
+                        if (neighbours_dict[neighbours_len].address == NULL) {malloc_error();}
+                        strcpy(neighbours_dict[neighbours_len].address, datagramParts);
+                    }
 
                     //get port
                     datagramParts = strtok(NULL,"~");
