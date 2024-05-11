@@ -81,6 +81,22 @@ typedef struct {
     timetableEntry *timetableEntry;
 }Timetable;
 
+typedef struct {
+    //name of station
+    char *name;
+
+    //ip address
+    char *address;
+
+    //port
+    int port;
+}Station;
+
+void malloc_error() {
+    perror("Memory not allocated"); 
+    exit(EXIT_FAILURE); 
+}
+
 //method to get minutes from %H:%M string format
 int getMins(const char* timeString) 
 {
@@ -140,20 +156,12 @@ Timetable read_timetable(const char* filename)
                 //initialise station components
                 departureInfoParts = strtok(NULL, ",\n");
                 timetable.longitude = malloc(strlen(departureInfoParts) + 1);
-                if (timetable.longitude == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (timetable.longitude == NULL) {malloc_error();}
                 strcpy(timetable.longitude,departureInfoParts);
 
                 departureInfoParts = strtok(NULL, ",\n");
                 timetable.latitude = malloc(strlen(departureInfoParts) + 1);
-                if (timetable.latitude == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (timetable.latitude == NULL) {malloc_error();}
                 strcpy(timetable.latitude,departureInfoParts);
 
                 //skip to next line
@@ -164,6 +172,7 @@ Timetable read_timetable(const char* filename)
 
             //create array to store departure info
             char **departureInfo = malloc(4*sizeof(char *));
+            if (departureInfo == NULL) {malloc_error();}
             departureInfo[0] = departureInfoParts;
 
             //keep splitting string until you cant
@@ -184,31 +193,25 @@ Timetable read_timetable(const char* filename)
                 {
                     //allocate memory and copy destination into entry
                     entry.destination = (char *)malloc(strlen(departureInfoParts) + 1);
-                    if (entry.destination == NULL) 
-                    { 
-                        perror("Memory not allocated"); 
-                        exit(EXIT_FAILURE);
-                    }
+                    if (entry.destination == NULL) {malloc_error();}
                     strcpy(entry.destination,departureInfoParts);
                 }
             }
 
             //store departure info into appropriate array
             entry.departureInfo = malloc(4 * sizeof(char *));
+            if (entry.departureInfo == NULL) {malloc_error();}
             
             for(int j = 0; j < 4; j++)
             {
                 entry.departureInfo[j] = malloc(strlen(departureInfo[j]) + 1);
+                if (entry.departureInfo[j] == NULL) {malloc_error();}
                 strcpy(entry.departureInfo[j],departureInfo[j]);
             }
 
             //add entry to timetable and resize the array
             timetable.timetableEntry = realloc(timetable.timetableEntry, (timetable.count + 1) * sizeof(timetableEntry));
-            if (timetable.timetableEntry == NULL) 
-            { 
-                perror("Memory not allocated"); 
-                exit(EXIT_FAILURE);
-            }
+            if (timetable.timetableEntry == NULL) {malloc_error();}
 
             timetable.timetableEntry[timetable.count] = entry;
             timetable.count++;
@@ -238,19 +241,11 @@ Timetable filter_timetable(Timetable timetable, char* cutOffTimeStr)
     filteredTimetable.count = 0;
 
     filteredTimetable.longitude = malloc(strlen(timetable.longitude) + 1);
-    if (filteredTimetable.longitude == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
+    if (filteredTimetable.longitude == NULL) {malloc_error();}
     strcpy(filteredTimetable.longitude,timetable.longitude);
 
     filteredTimetable.latitude = malloc(strlen(timetable.latitude) + 1);
-    if (filteredTimetable.latitude == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
+    if (filteredTimetable.latitude == NULL) {malloc_error();}
     strcpy(filteredTimetable.latitude,timetable.latitude);
 
 
@@ -271,28 +266,22 @@ Timetable filter_timetable(Timetable timetable, char* cutOffTimeStr)
             
             //copy filtered components into new empty entry
             filteredEntry.destination = malloc(strlen(entry.destination) + 1);
-            if (filteredEntry.destination == NULL) 
-            { 
-                perror("Memory not allocated"); 
-                exit(EXIT_FAILURE);
-            }
+            if (filteredEntry.destination == NULL) {malloc_error();}
             strcpy(filteredEntry.destination,entry.destination);
 
             filteredEntry.departureInfo = malloc(4*sizeof(char *)); 
+            if (filteredEntry.departureInfo == NULL) {malloc_error();}
 
             for(int j = 0; j < 4; j++)
             {
                 filteredEntry.departureInfo[j] = malloc(strlen(entry.departureInfo[j]) + 1);
+                if (filteredEntry.departureInfo[j] == NULL) {malloc_error();}
                 strcpy(filteredEntry.departureInfo[j],entry.departureInfo[j]);
             }
 
             //add entry to filtered timetable and resize the array
             filteredTimetable.timetableEntry = realloc(filteredTimetable.timetableEntry, (filteredTimetable.count + 1) * sizeof(timetableEntry));
-            if (filteredTimetable.timetableEntry == NULL) 
-            { 
-                perror("Memory not allocated"); 
-                exit(EXIT_FAILURE);
-            }
+            if (filteredTimetable.timetableEntry == NULL) {malloc_error();}
             filteredTimetable.timetableEntry[filteredTimetable.count] = filteredEntry;
             filteredTimetable.count++;
         }
@@ -310,20 +299,12 @@ char *generate_http_response(int statusCode, char* responseBody)
     {
         //store length of response body as string
         char *responseBodyLength = malloc(50);
-        if (responseBodyLength == NULL) 
-        { 
-            perror("Memory not allocated"); 
-            exit(EXIT_FAILURE);
-        }
+        if (responseBodyLength == NULL) {malloc_error();}
         sprintf(responseBodyLength,"%ld",strlen(responseBody));
 
         //allocate memory for response and write message to it
         response = malloc(strlen("HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n%s") + strlen(responseBody) + strlen(responseBodyLength));
-        if (response == NULL) 
-        { 
-            perror("Memory not allocated"); 
-            exit(EXIT_FAILURE);
-        }
+        if (response == NULL) {malloc_error();}
         sprintf(response, "HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n%s", responseBodyLength, responseBody);
     } 
     // Not Found response
@@ -336,20 +317,12 @@ char *generate_http_response(int statusCode, char* responseBody)
     {
         //store statusCode as string
         char *statusCodeStr = malloc(3);
-        if (statusCodeStr == NULL) 
-        { 
-            perror("Memory not allocated"); 
-            exit(EXIT_FAILURE);
-        }
+        if (statusCodeStr == NULL) {malloc_error();}
         sprintf(statusCodeStr,"%d",statusCode);
 
         //allocate memory for response and write message to it
         response = malloc(strlen("HTTP/1.1 %d\r\nContent-Length: 0\r\n\r\n") + strlen(statusCodeStr));
-        if (response == NULL) 
-        { 
-            perror("Memory not allocated"); 
-            exit(EXIT_FAILURE);
-        }
+        if (response == NULL) {malloc_error();}
         sprintf(response, "HTTP/1.1 %d\r\nContent-Length: 0\r\n\r\n", statusCode);
     }
 
@@ -362,29 +335,17 @@ Timetable destination_timetable(Timetable timetable, char *destination)
     //create and allocate memory for timetable containing entries leading only to destination
     Timetable allDestinationTimetable;
     allDestinationTimetable.timetableEntry = calloc(1,sizeof(timetableEntry));
-    if (allDestinationTimetable.timetableEntry == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
+    if (allDestinationTimetable.timetableEntry == NULL) {malloc_error();}
 
     //initialise station components
     allDestinationTimetable.count = 0;
 
     allDestinationTimetable.longitude = malloc(strlen(timetable.longitude) + 1);
-    if (allDestinationTimetable.longitude == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
+    if (allDestinationTimetable.longitude == NULL) {malloc_error();}
     strcpy(allDestinationTimetable.longitude,timetable.longitude);
 
     allDestinationTimetable.latitude = malloc(strlen(timetable.latitude) + 1);
-    if (allDestinationTimetable.latitude == NULL) 
-    { 
-        perror("Memory not allocated"); 
-        exit(EXIT_FAILURE);
-    }
+    if (allDestinationTimetable.latitude == NULL) {malloc_error();}
     strcpy(allDestinationTimetable.latitude,timetable.latitude);
 
     //add all entries which lead to the required destination to newly created timetable
@@ -396,11 +357,7 @@ Timetable destination_timetable(Timetable timetable, char *destination)
         {
             //add entry to timetable and resize the array
             allDestinationTimetable.timetableEntry = realloc(allDestinationTimetable.timetableEntry, (allDestinationTimetable.count + 1) * sizeof(timetableEntry));
-            if (allDestinationTimetable.timetableEntry == NULL) 
-            { 
-                perror("Memory not allocated"); 
-                exit(EXIT_FAILURE);
-            }
+            if (allDestinationTimetable.timetableEntry == NULL) {malloc_error();}
             allDestinationTimetable.timetableEntry[allDestinationTimetable.count] = entry;
             allDestinationTimetable.count++;
         }
@@ -456,6 +413,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 {
     //read file and get timetable
     char *filename = malloc(strlen("tt-%s") + strlen(stationName));
+    if (filename == NULL) {malloc_error();}
     sprintf(filename,"tt-%s",stationName);
     Timetable stationTimetable = read_timetable(filename);
 
@@ -474,6 +432,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     char *afterTime = malloc(strlen(":") + 4);
     char *hour = malloc(3);
     char *minute = malloc(3);
+    if (afterTime == NULL || hour == NULL || minute == NULL) {malloc_error();}
+
     //add padding 0 if hour or minute < 10
     if (currentTime->tm_hour < 10) {
         sprintf (hour, "%02d", currentTime->tm_hour);
@@ -542,6 +502,19 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     }
 
     printf("Server started for %s on browser port %d and query port %d\n", stationName, browser_port, query_port);
+
+    //TODO get ip address
+    char* IPaddress = "localhost";
+
+    char* i_message = malloc(5 + strlen(stationName) + strlen(IPaddress) + 4);
+    if (i_message == NULL) {malloc_error();}
+    sprintf(i_message, "I~%s~%s~%i", stationName, IPaddress, query_port);
+
+    //send identifying message to all neighbours
+    for (int i = 0; i < num_neighbors; i++) {
+        //TODO send i_message to all neighbours as udp message
+        printf("Sent %s to %s\n", i_message, neighbors[i]);
+    }
 
     //used for select
     fd_set readset;
@@ -615,6 +588,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 Timetable destinationTimetable = destination_timetable(filteredTimetable,destination);
                 char* route = find_fastest_route(destinationTimetable, afterTime);
 
+                //check if source neighbours destination
                 bool neighbours_destination = false;
                 //iterate through the unfiltered timetable
                 for (int i = 0; i < stationTimetable.count; i++) {
@@ -630,22 +604,20 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                     //temp, will just report it
                     route = malloc(strlen("%s does not neighbour %s") + strlen(stationName) + strlen(destination));
+                    if (route == NULL) {malloc_error();}
                     sprintf(route,"%s does not neighbour %s", stationName, destination);
                 }
 
                 if(route == NULL)
                 {
                     route = malloc(strlen("There is no journey from %s to %s leaving after %s today") + strlen(stationName) + strlen(destination) + strlen(afterTime));
+                    if (route == NULL) {malloc_error();}
                     sprintf(route,"There is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
                 }
                 
                 // Format the response message with the timetable information
                 char *responseBody = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) +strlen(destination));
-                if(responseBody == NULL)
-                {
-                    perror("Memory allocation failed");
-                    exit(EXIT_FAILURE);
-                }
+                if(responseBody == NULL) {malloc_error();}
                 sprintf(responseBody,"Fastest route to %s:\n%s",destination,route);
 
                 // Format the HTTP response
@@ -676,11 +648,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //get components from datagram
                 char *datagramParts = strtok(udpDatagram,"~");
                 char *messageType = malloc(strlen(datagramParts) + 1);
-                if (messageType == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (messageType == NULL) {malloc_error();}
                 strcpy(messageType,datagramParts);
 
                 if(strcmp(messageType,"M"))
@@ -698,22 +666,21 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //TODO
                 }
 
+                //I, for initialise, sends name and IP to neighbouring servers on startup
+                if(strcmp(messageType,"I"))
+                {
+                    //TODO
+                }
+
+
                 datagramParts = strtok(NULL,"~");
                 char *sourceStation = malloc(strlen(datagramParts) + 1);
-                if (sourceStation == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (sourceStation == NULL) {malloc_error();}
                 strcpy(sourceStation,datagramParts);
 
                 datagramParts = strtok(NULL,"~");
                 char *destStation = malloc(strlen(datagramParts) + 1);
-                if (destStation == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (destStation == NULL) {malloc_error();}
                 strcpy(destStation,datagramParts);
 
                 //if the destination is reached
@@ -724,31 +691,19 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 datagramParts = strtok(NULL,"~");
                 char *journeyPorts = malloc(strlen(datagramParts) + 1);
-                if (journeyPorts == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (journeyPorts == NULL) {malloc_error();}
                 strcpy(journeyPorts,datagramParts);
                 //add current port to journey ports -- TODO
 
                 datagramParts = strtok(NULL,"~");
                 char *currentTime = malloc(strlen(datagramParts) + 1);
-                if (currentTime == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (currentTime == NULL) {malloc_error();}
                 strcpy(currentTime,datagramParts);
                 //send datagram out to all neighbours after this time --TODO
 
                 datagramParts = strtok(NULL,"~");
                 char *timeToLiveStr = malloc(strlen(datagramParts) + 1);
-                if (timeToLiveStr == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (timeToLiveStr == NULL) {malloc_error();}
                 strcpy(timeToLiveStr,datagramParts);
                 int timeToLive = atoi(timeToLiveStr);
                 if(timeToLive == 0)
@@ -759,11 +714,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 datagramParts = strtok(NULL,"~");
                 char *routeSoFar = malloc(strlen(datagramParts) + 1);
-                if (routeSoFar == NULL) 
-                { 
-                    perror("Memory not allocated"); 
-                    exit(EXIT_FAILURE);
-                }
+                if (routeSoFar == NULL) {malloc_error();}
                 strcpy(routeSoFar,datagramParts);
 
             }
