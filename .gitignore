@@ -1,0 +1,7 @@
+.vscode
+tt-*
+**/adjacency
+**/mywebpage.html
+**/station-server
+**/station-server.sh
+**/stopChanges.sh
