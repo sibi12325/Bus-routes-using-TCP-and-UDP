@@ -424,6 +424,7 @@ void send_a_udp_message(char* message, char* address_port) {
     sendto(udpServerSocket, message, strlen(message), 0, (const struct sockaddr*)&destination, sizeof(destination));
 }
 
+
 char *get_ip_address() 
 {
     int socket_fd;
@@ -474,12 +475,18 @@ char *get_ip_address()
     close(socket_fd);
 
     return ip;
+  
+  
+//function to run after all servers are ready
+void initialise() {
+  
 }
 
 #define MAX_BUFFER_SIZE 1024
 
 void start_server(char* stationName, int browser_port, int query_port, char** neighbors, int num_neighbors) 
 {
+
     //read file and get timetable
     char *filename = malloc(strlen("tt-%s") + strlen(stationName));
     if (filename == NULL) {malloc_error();}
@@ -572,6 +579,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     printf("Server started for %s on browser port %d and query port %d\n", stationName, browser_port, query_port);
 
+    //wait a second for all other servers to start before initialising network
+    sleep(1);
+    
     //initialise array for neighbouring stations
     int neighbours_len = 0;
     Station* neighbours_dict = malloc(neighbours_len * sizeof(Station));
@@ -583,9 +593,10 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     sprintf(i_message, "I~%s~%s~%i", stationName, IPaddress, query_port);
 
     //send identifying message to all neighbours
+    printf("Sending identification messages from %s\n", stationName);
     for (int i = 0; i < num_neighbors; i++) {
-        send_a_udp_message(i_message, neighbors[i]);
         printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
+        send_a_udp_message(i_message, neighbors[i]);
     }
 
     //used for select
@@ -826,7 +837,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                     printf("    %s: Added to neighbours_dict %s = %s:%i\n", stationName, neighbours_dict[neighbours_len].name, 
                     neighbours_dict[neighbours_len].address, neighbours_dict[neighbours_len].port);
-                    
+
                     //increment length of array
                     neighbours_len++;
                 }
