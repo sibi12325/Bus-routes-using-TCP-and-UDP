@@ -106,6 +106,9 @@ def server(station_name, browser_port, query_port, neighbours):
     browser_port = int(browser_port)
     query_port = int(query_port)
 
+    # store the neighbour address with corresponding names
+    neighbour_address = {}
+
     # Create a TCP/IP socket for handling queries from the web interface
     tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_socket.bind((IP, browser_port))
@@ -116,6 +119,13 @@ def server(station_name, browser_port, query_port, neighbours):
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.bind((IP, query_port))
     print(f"{station_name} UDP Server listening on {IP}:{query_port}")
+
+    # Send station names to its neighbours
+    station_to_neighbour = f"I~{station_name}"
+    for neighbour in neighbours:
+        time.sleep(2)
+        udp_socket.sendto(station_to_neighbour.encode(), neighbour)
+
 
     #Read the timetable
     filename = f"tt-{station_name}"
@@ -128,6 +138,7 @@ def server(station_name, browser_port, query_port, neighbours):
 
     #Dictionary of client sockets 
     client_sockets = {}
+
 
     while True:
         events = poll_object.poll()
@@ -200,6 +211,11 @@ def server(station_name, browser_port, query_port, neighbours):
                     msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{route}"
                     udp_socket.sendto(msg.encode(), address)
                 
+                #Recieve the station name and store it
+                elif (parts[0] == "I"):
+                    neighbour_address[parts[1]] = address
+
+
                 #this will send msg back to the tcp server
                 elif(parts[0] == "R" and parts[2] == station_name):
                     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
