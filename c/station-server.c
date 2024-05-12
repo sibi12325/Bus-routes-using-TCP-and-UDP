@@ -750,7 +750,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         sprintf(m_message, "M~%s~%i~%s~%s~%i~%s~%s", stationName, message_id, destination, new_afterTime, TIME_TO_LIVE, route, stationName);
                         
                         //send message
-                        printf("    %s: Sent %s to %s:%d\n", stationName, m_message, neighbor_station->address, neighbor_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
 
                         //add this message's id to the dict of messages its seen
@@ -893,9 +893,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     datagramParts = strtok(NULL, "~");
                     char *journeySoFar = malloc(strlen(datagramParts) + strlen(stationName) + 1);
                     if (journeySoFar == NULL) {malloc_error();}
-                    strcpy(journeySoFar, datagramParts);
-                    strcat(journeySoFar, "@");
-                    strcat(journeySoFar, stationName);
+                    sprintf(journeySoFar, "%s@%s", datagramParts, stationName);
 
                     //for each neighbour of this node
                     for (int i = 0; i < num_neighbors; i++) {
@@ -921,9 +919,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         //add route to a copy of routeSoFar
                         char* new_routeSoFar = malloc(strlen(routeSoFar) + strlen(route) + 1);
                         if (new_routeSoFar == NULL) {malloc_error();}
-                        strcpy(new_routeSoFar, routeSoFar);
-                        strcat(new_routeSoFar, "@");
-                        strcat(new_routeSoFar, route);
+                        sprintf(new_routeSoFar, "%s@%s", routeSoFar, route);
 
                         //construct new m message
                         char* m_message = malloc(8 + strlen(sourceStation) + strlen(id) + strlen(destStation) + 5 + 2 + strlen(routeSoFar) + strlen(journeySoFar));
@@ -931,7 +927,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         sprintf(m_message, "M~%s~%s~%s~%s~%i~%s~%s", sourceStation, id, destStation, new_afterTime, timeToLive, new_routeSoFar, journeySoFar);
                         
                         //send message
-                        printf("    %s: Sent %s to %s:%d\n", stationName, m_message, neighbor_station->address, neighbor_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
                     }
                 }
