@@ -842,7 +842,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                             drop_packet = true;
                         }
                     }
-                    if(drop_packet) {drop_packet = false; break;}
+                    if(drop_packet) {drop_packet = false; continue;}
 
                     //if it doesn't match, add it to the visited_dict
                     visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
@@ -866,7 +866,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         drop_packet = true;
                     }
                     //break and don't relay M message further
-                    if(drop_packet) {drop_packet = false; break;}
+                    if(drop_packet) {drop_packet = false; continue;}
 
                     datagramParts = strtok(NULL, "~");
                     char *currentTime = malloc(strlen(datagramParts) + 1);
