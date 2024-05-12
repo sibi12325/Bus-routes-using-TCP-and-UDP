@@ -58,6 +58,7 @@ char* parse_destination(char* query)
 }
 
 #define MAX_LINE_LENGTH 256
+#define TIME_TO_LIVE 32
 
 //structure storing each entry of the timetable
 typedef struct 
@@ -423,7 +424,6 @@ void send_a_udp_message(char* message, char* address, int port) {
     sendto(udpServerSocket, message, strlen(message), 0, (const struct sockaddr*)&destination, sizeof(destination));
 }
 
-
 char *get_ip_address() 
 {
     int socket_fd;
@@ -475,11 +475,30 @@ char *get_ip_address()
 
     return ip;
 }
-  
-  
-//function to run after all servers are ready
-void initialise() {
-  
+
+//neighbors_len and neighbors_dict declared here for this function
+int neighbors_len;
+Station* neighbors_dict;
+
+//converts an ip address into a station object, based off the servers neighbor dict
+Station* ip_to_station(char* neighbor) {
+    Station* return_station;
+    return_station = (Station*) malloc(sizeof(Station));
+    if (return_station == NULL) {malloc_error();}
+
+    //slice ip address to just port
+    char* address = strtok(neighbor, ":");
+    address = strtok(NULL, ":");
+    int port = atoi(address);
+
+    //search for matching port in neighbors_dict
+    for (int i = 0; i < neighbors_len; i++) {
+        if (neighbors_dict[i].port == port) {
+            *(return_station) = neighbors_dict[i];
+        }
+    }
+
+    return return_station;
 }
 
 #define MAX_BUFFER_SIZE 1024
@@ -566,7 +585,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     if (bind(udpServerSocket, (const struct sockaddr *)&udp_server_addr, sizeof(udp_server_addr)) < 0) 
     {
-        perror("bind failed");
+        perror("Bind failed");
         exit(EXIT_FAILURE);
     }
 
@@ -582,20 +601,27 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     //wait a second for all other servers to start before initialising network
     sleep(1);
     
-    //initialise array for neighbouring stations
-    int neighbours_len = 0;
-    Station* neighbours_dict = malloc(neighbours_len * sizeof(Station));
+    //initialise array for neighboring stations (declared earlier)
+    neighbors_len = 0;
+    neighbors_dict = malloc(neighbors_len * sizeof(Station));
 
     char* IPaddress = get_ip_address();
     char* i_message = malloc(5 + strlen(stationName) + strlen(IPaddress) + 4);
     if (i_message == NULL) {malloc_error();}
     sprintf(i_message, "I~%s~%s~%i", stationName, IPaddress, query_port);
 
-    //send identifying message to all neighbours
+    //send identifying message to all neighbors
     printf("Sending identification messages from %s\n", stationName);
     for (int i = 0; i < num_neighbors; i++) {
         printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
-        char* address = strtok(neighbors[i], ":");
+
+        //copying neighbors[i] into a new string so that strtok doesn't mutate the original
+        char* neighbor = malloc(strlen(neighbors[i])); 
+        if (neighbor == NULL) {malloc_error();}
+        strcpy(neighbor, neighbors[i]);
+
+        //slicing address and sending udp message
+        char* address = strtok(neighbor, ":");
         int port = atoi(strtok(NULL, ":"));
         send_a_udp_message(i_message, address, port);
     }
@@ -658,7 +684,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //cut TCP query down to just the first line
                 char* cut_query = strtok(query, "\n");
                 printf("    %s: Received TCP, %s\n", stationName, cut_query);
-
+                
                 //parse the destination
                 char *destination = parse_destination(query);
                 if(destination == NULL)
@@ -670,28 +696,60 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 }
 
                 //get the fastest route
-                Timetable destinationTimetable = destination_timetable(filteredTimetable,destination);
+                Timetable destinationTimetable = destination_timetable(filteredTimetable, destination);
                 char* route = find_fastest_route(destinationTimetable, afterTime);
-
-                //check if source neighbours destination
-                bool neighbours_destination = false;
-                //iterate through the unfiltered timetable
-                for (int i = 0; i < stationTimetable.count; i++) {
-                    //if queried destination is in the timetable
-                    if (strcmp(destination, stationTimetable.timetableEntry[i].destination) == 0) {
-                        neighbours_destination = true;
+                
+                //check if source neighbors destination
+                bool neighbors_destination = false;
+                //iterate through the neighbors dict
+                for (int i = 0; i < neighbors_len; i++) {
+                    //if queried destination is in the dict
+                    if (strcmp(destination, neighbors_dict[i].name) == 0) {
+                        neighbors_destination = true;
                         break;
                     }
                 }
 
-                //if station does not neighbour the destination, send out UDP request
-                if (!neighbours_destination) {
-                    //TODO send UDP request to other stations here
+                //if station does not neighbor the destination, send out UDP request
+                if (!neighbors_destination) {
+                    //construct the initial M message, send it to all neighbors
+                    //M~source_station_name~destination_station_name~time~timetolive~route~journey
+                    for (int i = 0; i < num_neighbors; i++) {
+                        //copying neighbors[i] into a new string so that strtok doesn't mutate the original
+                        char* neighbor = malloc(strlen(neighbors[i])); 
+                        if (neighbor == NULL) {malloc_error();}
+                        strcpy(neighbor, neighbors[i]);
 
-                    //temp, will just report it
-                    route = malloc(strlen("%s does not neighbour %s") + strlen(stationName) + strlen(destination));
+                        //getting a station object for the neighbor
+                        Station* neighbor_station = ip_to_station(neighbors[i]);
+
+                        //find fastest route to neighbor
+                        Timetable destinationTimetable = destination_timetable(filteredTimetable, neighbor_station->name);
+                        route = find_fastest_route(destinationTimetable, afterTime);
+
+                        //extract the last arrival time from route
+                        char* new_afterTime = malloc(strlen(route));
+                        if (new_afterTime == NULL) {malloc_error();}
+                        //slicing from -7 to -2
+                        strncpy(new_afterTime, route + strlen(route)-7, 5);
+
+
+                        //construct m message
+                        char* m_message = malloc(8 + strlen(stationName)*2 + strlen(destination) + 5 + 2 + strlen(route));
+                        if (m_message == NULL) {malloc_error();}
+                        sprintf(m_message, "M~%s~%s~%s~%i~%s~%s", stationName, destination, new_afterTime, TIME_TO_LIVE, route, stationName);
+
+                        //send message
+                        printf("    %s: Sent %s to %s:%d\n", stationName, m_message, neighbor_station->address, neighbor_station->port);
+                        send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+                    }
+
+                    //temp report for non-neighbors
+                    /*
+                    route = malloc(strlen("%s does not neighbor %s") + strlen(stationName) + strlen(destination));
                     if (route == NULL) {malloc_error();}
-                    sprintf(route,"%s does not neighbour %s", stationName, destination);
+                    sprintf(route,"%s does not neighbor %s", stationName, destination);
+                    */
                 }
 
                 if(route == NULL)
@@ -754,22 +812,17 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     strcpy(destStation,datagramParts);
 
                     //if the destination is reached
-                    if(strcmp(destStation,stationName))
+                    if(strcmp(destStation,stationName) == 0)
                     {
-                        //TODO
+                        //TODO send R message
+                        printf("REACHED DESTINATION!!!\n");
                     }
-
-                    datagramParts = strtok(NULL, "~");
-                    char *journey = malloc(strlen(datagramParts) + 1);
-                    if (journey == NULL) {malloc_error();}
-                    strcpy(journey, datagramParts);
-                    //add current station name to journey -- TODO
 
                     datagramParts = strtok(NULL, "~");
                     char *currentTime = malloc(strlen(datagramParts) + 1);
                     if (currentTime == NULL) {malloc_error();}
                     strcpy(currentTime,datagramParts);
-                    //send datagram out to all neighbours after this time --TODO
+                    //send datagram out to all neighbors after this time --TODO
 
                     datagramParts = strtok(NULL, "~");
                     char *timeToLiveStr = malloc(strlen(datagramParts) + 1);
@@ -778,14 +831,59 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     int timeToLive = atoi(timeToLiveStr);
                     if(timeToLive == 0)
                     {
-                        //DROP PACKET
+                        //TODO DROP PACKET
                     }
                     timeToLive--;
 
                     datagramParts = strtok(NULL, "~");
-                    char *routeSoFar = malloc(strlen(datagramParts) + 1);
+                    char *routeSoFar = malloc(strlen(datagramParts));
                     if (routeSoFar == NULL) {malloc_error();}
-                    strcpy(routeSoFar,datagramParts);
+                    strcpy(routeSoFar, datagramParts);
+
+                    datagramParts = strtok(NULL, "~");
+                    char *journeySoFar = malloc(strlen(datagramParts) + strlen(stationName) + 1);
+                    if (journeySoFar == NULL) {malloc_error();}
+                    strcpy(journeySoFar, datagramParts);
+                    strcat(journeySoFar, "@");
+                    strcat(journeySoFar, stationName);
+
+                    //for each neighbour of this node
+                    for (int i = 0; i < num_neighbors; i++) {
+                        //copying neighbors[i] into a new string so that strtok doesn't mutate the original
+                        char* neighbor = malloc(strlen(neighbors[i])); 
+                        if (neighbor == NULL) {malloc_error();}
+                        strcpy(neighbor, neighbors[i]);
+
+                        //getting a station object for the neighbor
+                        Station* neighbor_station = ip_to_station(neighbors[i]);
+
+                        //find fastest route to neighbor
+                        filteredTimetable = filter_timetable(filteredTimetable, currentTime);
+                        Timetable destinationTimetable = destination_timetable(filteredTimetable, neighbor_station->name);
+                        char* route = find_fastest_route(destinationTimetable, currentTime);
+
+                        //extract the last arrival time from route
+                        char* new_afterTime = malloc(strlen(route));
+                        if (new_afterTime == NULL) {malloc_error();}
+                        //slicing from -7 to -2
+                        strncpy(new_afterTime, route + strlen(route)-7, 5);
+
+                        //add route to a copy of routeSoFar
+                        char* new_routeSoFar = malloc(strlen(routeSoFar) + strlen(route) + 1);
+                        if (new_routeSoFar == NULL) {malloc_error();}
+                        strcpy(new_routeSoFar, routeSoFar);
+                        strcat(new_routeSoFar, "@");
+                        strcat(new_routeSoFar, route);
+
+                        //construct new m message
+                        char* m_message = malloc(8 + strlen(sourceStation) + strlen(destStation) + 5 + 2 + strlen(routeSoFar) + strlen(journeySoFar));
+                        if (m_message == NULL) {malloc_error();}
+                        sprintf(m_message, "M~%s~%s~%s~%i~%s~%s", sourceStation, destStation, new_afterTime, timeToLive, new_routeSoFar, journeySoFar);
+                        
+                        //send message
+                        printf("    %s: Sent %s to %s:%d\n", stationName, m_message, neighbor_station->address, neighbor_station->port);
+                        send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+                    }
                 }
 
                 //A, for acknowledgements
@@ -805,35 +903,35 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //TODO
                 }
 
-                //I, for initialise, sends name, IP and address to neighbouring servers on startup
+                //I, for initialise, sends name, IP and address to neighboring servers on startup
                 //format: I~name~address~port
                 if(strcmp(messageType, "I") == 0)
                 {
-                    //expand neighbours dict array
-                    neighbours_dict = realloc(neighbours_dict, (neighbours_len + 1) * sizeof(Station));
-                    if (neighbours_dict == NULL) {malloc_error();}
+                    //expand neighbors dict array
+                    neighbors_dict = realloc(neighbors_dict, (neighbors_len + 1) * sizeof(Station));
+                    if (neighbors_dict == NULL) {malloc_error();}
 
                     //get name
                     datagramParts = strtok(NULL,"~");
-                    neighbours_dict[neighbours_len].name = malloc(strlen(datagramParts) + 1);
-                    if (neighbours_dict[neighbours_len].name == NULL) {malloc_error();}
-                    strcpy(neighbours_dict[neighbours_len].name, datagramParts);
+                    neighbors_dict[neighbors_len].name = malloc(strlen(datagramParts) + 1);
+                    if (neighbors_dict[neighbors_len].name == NULL) {malloc_error();}
+                    strcpy(neighbors_dict[neighbors_len].name, datagramParts);
 
                     //get address
                     datagramParts = strtok(NULL,"~");
-                    neighbours_dict[neighbours_len].address = malloc(strlen(datagramParts) + 1);
-                    if (neighbours_dict[neighbours_len].address == NULL) {malloc_error();}
-                    strcpy(neighbours_dict[neighbours_len].address, datagramParts);
+                    neighbors_dict[neighbors_len].address = malloc(strlen(datagramParts) + 1);
+                    if (neighbors_dict[neighbors_len].address == NULL) {malloc_error();}
+                    strcpy(neighbors_dict[neighbors_len].address, datagramParts);
 
                     //get port
                     datagramParts = strtok(NULL,"~");
-                    neighbours_dict[neighbours_len].port = atoi(datagramParts);
+                    neighbors_dict[neighbors_len].port = atoi(datagramParts);
 
-                    printf("    %s: Added to neighbours_dict %s = %s:%i\n", stationName, neighbours_dict[neighbours_len].name, 
-                    neighbours_dict[neighbours_len].address, neighbours_dict[neighbours_len].port);
+                    printf("    %s: Added to neighbors_dict %s = %s:%i\n", stationName, neighbors_dict[neighbors_len].name, 
+                    neighbors_dict[neighbors_len].address, neighbors_dict[neighbors_len].port);
 
                     //increment length of array
-                    neighbours_len++;
+                    neighbors_len++;
                 }
 
             }
