@@ -501,6 +501,22 @@ Station* ip_to_station(char* neighbor) {
     return return_station;
 }
 
+//converts a station name into a station object, based off the servers neighbor dict
+Station* name_to_station(char* neighbor) {
+    Station* return_station;
+    return_station = (Station*) malloc(sizeof(Station));
+    if (return_station == NULL) {malloc_error();}
+
+    //search for matching name in neighbors_dict
+    for (int i = 0; i < neighbors_len; i++) {
+        if (neighbors_dict[i].name == neighbor) {
+            *(return_station) = neighbors_dict[i];
+        }
+    }
+
+    return return_station;
+}
+
 #define MAX_BUFFER_SIZE 1024
 
 void start_server(char* stationName, int browser_port, int query_port, char** neighbors, int num_neighbors) 
@@ -861,19 +877,51 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //if the destination is reached
                     if(strcmp(destStation,stationName) == 0)
                     {
-                        //TODO send R message
                         printf("    %s: %s has reached its destination!\n", stationName, source_id);
                         drop_packet = true;
+
+                        //aftertime
+                        datagramParts = strtok(NULL, "~");
+                        //time to live
+                        datagramParts = strtok(NULL, "~");
+
+                        //route
+                        datagramParts = strtok(NULL, "~");
+                        char *route = malloc(strlen(datagramParts) + 1);
+                        if (route == NULL) {malloc_error();}
+                        strcpy(route, datagramParts);
+
+                        //journey
+                        datagramParts = strtok(NULL, "~");
+                        char *journey = malloc(strlen(datagramParts) + strlen(stationName) + 2);
+                        if (journey == NULL) {malloc_error();}
+                        strcpy(journey, datagramParts);
+
+                        //get most recent stop on the journey
+                        printf("%s\n", journey);
+                        char* last_stop = strtok(journey, "@");
+                        printf("%s\n", journey);
+
+                        //construct the r message
+                        char* r_message = malloc(4 + strlen(route) + strlen(journey));
+                        if (r_message == NULL) {malloc_error();}
+                        sprintf(r_message, "R~%s~%s", route, journey);
+
+                        //send the r message to the most recent stop on journey
+                        Station* last_station = name_to_station(last_stop);
+                        send_a_udp_message(r_message, last_station->address, last_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, r_message, last_station->name);
                     }
                     //break and don't relay M message further
                     if(drop_packet) {drop_packet = false; continue;}
 
+                    //aftertime
                     datagramParts = strtok(NULL, "~");
                     char *currentTime = malloc(strlen(datagramParts) + 1);
                     if (currentTime == NULL) {malloc_error();}
                     strcpy(currentTime,datagramParts);
-                    //send datagram out to all neighbors after this time --TODO
 
+                    //time to live
                     datagramParts = strtok(NULL, "~");
                     char *timeToLiveStr = malloc(strlen(datagramParts) + 1);
                     if (timeToLiveStr == NULL) {malloc_error();}
@@ -881,19 +929,23 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     int timeToLive = atoi(timeToLiveStr);
                     if(timeToLive == 0)
                     {
-                        //TODO DROP PACKET
+                        printf("    %s: Dropped %s (time to live expired)\n", stationName, source_id);
+                        drop_packet = true;
                     }
+                    if(drop_packet) {drop_packet = false; continue;}
                     timeToLive--;
 
+                    //route
                     datagramParts = strtok(NULL, "~");
                     char *routeSoFar = malloc(strlen(datagramParts) + 1);
                     if (routeSoFar == NULL) {malloc_error();}
                     strcpy(routeSoFar, datagramParts);
 
+                    //journey
                     datagramParts = strtok(NULL, "~");
                     char *journeySoFar = malloc(strlen(datagramParts) + strlen(stationName) + 2);
                     if (journeySoFar == NULL) {malloc_error();}
-                    sprintf(journeySoFar, "%s@%s", datagramParts, stationName);
+                    sprintf(journeySoFar, "%s@%s", stationName, datagramParts);
 
                     //for each neighbour of this node
                     for (int i = 0; i < num_neighbors; i++) {
@@ -909,6 +961,10 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         filteredTimetable = filter_timetable(filteredTimetable, currentTime);
                         Timetable destinationTimetable = destination_timetable(filteredTimetable, neighbor_station->name);
                         char* route = find_fastest_route(destinationTimetable, currentTime);
+                        if (route == NULL) {
+                            printf("too late, go to bed loser\n");
+                            //TODO too late in the day, send an R message back
+                        }
 
                         //extract the last arrival time from route
                         char* new_afterTime = malloc(strlen(route) + 1);
@@ -944,7 +1000,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //route is the list of bus/train routes to deliver to the user
                 //journey is the list of station servers visited by the packet
                 //packet will reuse journey in reverse to trace steps back
-                if(strcmp(messageType,"R"))
+                if(strcmp(messageType,"R") == 0)
                 {
                     //TODO
                 }
