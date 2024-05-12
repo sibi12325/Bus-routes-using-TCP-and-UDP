@@ -551,6 +551,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     int numbytes;
     char udpDatagram[MAX_BUFFER_SIZE];
 
+    //message id, increments for each message sent, used to identify duplicates
+    int message_id = -1;
+
     // Create a TCP socket for handling queries from the web interface
     if ((tcpServerSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     {
@@ -625,6 +628,13 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         int port = atoi(strtok(NULL, ":"));
         send_a_udp_message(i_message, address, port);
     }
+
+    //create array for requests that have visited before
+    int visited_len = 0;
+    char** visited_dict = malloc(neighbors_len * sizeof(char*));
+
+    //bool used to drop packets
+    bool drop_packet = false;
 
     //used for select
     fd_set readset;
@@ -733,23 +743,29 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         //slicing from -7 to -2
                         strncpy(new_afterTime, route + strlen(route)-7, 5);
 
-
-                        //construct m message
-                        char* m_message = malloc(8 + strlen(stationName)*2 + strlen(destination) + 5 + 2 + strlen(route));
+                        //construct initial m message
+                        message_id++;
+                        char* m_message = malloc(9 + strlen(stationName)*2 + message_id + 9 / 10 + strlen(destination) + 5 + 2 + strlen(route));
                         if (m_message == NULL) {malloc_error();}
-                        sprintf(m_message, "M~%s~%s~%s~%i~%s~%s", stationName, destination, new_afterTime, TIME_TO_LIVE, route, stationName);
-
+                        sprintf(m_message, "M~%s~%i~%s~%s~%i~%s~%s", stationName, message_id, destination, new_afterTime, TIME_TO_LIVE, route, stationName);
+                        
                         //send message
                         printf("    %s: Sent %s to %s:%d\n", stationName, m_message, neighbor_station->address, neighbor_station->port);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+
+                        //add this message's id to the dict of messages its seen
+                        char* source_id = malloc(strlen(stationName) + (message_id + 9)/10 + 2);
+                        if (source_id == NULL) {malloc_error();}
+                        sprintf(source_id, "%s@%i", stationName, message_id);
+                        
+                        visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
+                        if (visited_dict == NULL) {malloc_error();}
+                        visited_dict[visited_len] = malloc(strlen(source_id));
+                        if (visited_dict[visited_len] == NULL) {malloc_error();}
+                        strcpy(visited_dict[visited_len], source_id);
+                        visited_len++;
                     }
 
-                    //temp report for non-neighbors
-                    /*
-                    route = malloc(strlen("%s does not neighbor %s") + strlen(stationName) + strlen(destination));
-                    if (route == NULL) {malloc_error();}
-                    sprintf(route,"%s does not neighbor %s", stationName, destination);
-                    */
                 }
 
                 if(route == NULL)
@@ -787,7 +803,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 // turn datagram into string
                 udpDatagram[numbytes] = '\0';
-                printf("    %s: Received UDP, %s\n", stationName, udpDatagram);
+                printf("    %s: Received %s\n", stationName, udpDatagram);
 
                 //get components from datagram
                 char *datagramParts = strtok(udpDatagram, "~");
@@ -801,11 +817,42 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //journey is the list of station servers visited by the packet
                 if(strcmp(messageType, "M") == 0)
                 {
+                    //source station name
                     datagramParts = strtok(NULL, "~");
                     char *sourceStation = malloc(strlen(datagramParts) + 1);
                     if (sourceStation == NULL) {malloc_error();}
                     strcpy(sourceStation,datagramParts);
 
+                    //message id
+                    datagramParts = strtok(NULL, "~");
+                    char *id = malloc(strlen(datagramParts) + 1);
+                    if (id == NULL) {malloc_error();}
+                    strcpy(id, datagramParts);
+
+                    //combine source and message id
+                    char* source_id = malloc(strlen(sourceStation) + strlen(id) + 2);
+                    if (source_id == NULL) {malloc_error();}
+                    sprintf(source_id, "%s@%s", sourceStation, id);
+
+                    //if the request has visited here previously
+                    for (int j = 0; j < visited_len; j++){
+                        if(strcmp(visited_dict[j], source_id) == 0) {
+                            //DROP PACKET
+                            printf("    %s: Dropped %s (already seen)\n", stationName, source_id);
+                            drop_packet = true;
+                        }
+                    }
+                    if(drop_packet) {drop_packet = false; break;}
+
+                    //if it doesn't match, add it to the visited_dict
+                    visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
+                    if (visited_dict == NULL) {malloc_error();}
+                    visited_dict[visited_len] = malloc(strlen(source_id));
+                    if (visited_dict[visited_len] == NULL) {malloc_error();}
+                    strcpy(visited_dict[visited_len], source_id);
+                    visited_len++;
+
+                    //destination station name
                     datagramParts = strtok(NULL, "~");
                     char *destStation = malloc(strlen(datagramParts) + 1);
                     if (destStation == NULL) {malloc_error();}
@@ -815,8 +862,11 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if(strcmp(destStation,stationName) == 0)
                     {
                         //TODO send R message
-                        printf("REACHED DESTINATION!!!\n");
+                        printf("    %s: %s has reached its destination!\n", stationName, source_id);
+                        drop_packet = true;
                     }
+                    //break and don't relay M message further
+                    if(drop_packet) {drop_packet = false; break;}
 
                     datagramParts = strtok(NULL, "~");
                     char *currentTime = malloc(strlen(datagramParts) + 1);
@@ -876,9 +926,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         strcat(new_routeSoFar, route);
 
                         //construct new m message
-                        char* m_message = malloc(8 + strlen(sourceStation) + strlen(destStation) + 5 + 2 + strlen(routeSoFar) + strlen(journeySoFar));
+                        char* m_message = malloc(8 + strlen(sourceStation) + strlen(id) + strlen(destStation) + 5 + 2 + strlen(routeSoFar) + strlen(journeySoFar));
                         if (m_message == NULL) {malloc_error();}
-                        sprintf(m_message, "M~%s~%s~%s~%i~%s~%s", sourceStation, destStation, new_afterTime, timeToLive, new_routeSoFar, journeySoFar);
+                        sprintf(m_message, "M~%s~%s~%s~%s~%i~%s~%s", sourceStation, id, destStation, new_afterTime, timeToLive, new_routeSoFar, journeySoFar);
                         
                         //send message
                         printf("    %s: Sent %s to %s:%d\n", stationName, m_message, neighbor_station->address, neighbor_station->port);
