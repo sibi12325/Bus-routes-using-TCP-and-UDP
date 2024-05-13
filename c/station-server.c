@@ -476,9 +476,9 @@ char** received_dict;
 
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
-    char* best_route = received_dict[received_len];
-    printf("%s\n", best_route);
+    char* best_route;
     char* fastest_time = "23:59";
+
     for (int i = 0; i < received_len; i++) {
         char* arrive_time = malloc(strlen(received_dict[i]) + 1);
         if (arrive_time == NULL) {malloc_error();}
@@ -486,8 +486,8 @@ char* choose_fastest_route() {
         strncpy(arrive_time, received_dict[i] + strlen(received_dict[i])-7, 5);
 
         if (strcmp(arrive_time, fastest_time) < 0) { //negative value if arrive less than fastest
-            strcpy(fastest_time, arrive_time);
-            best_route = received_dict[0];
+            fastest_time = arrive_time; 
+            best_route = received_dict[i];
         }
     }
 
@@ -498,7 +498,6 @@ char* choose_fastest_route() {
         }
     }
 
-    printf("%s\n", best_route);
     return best_route;
 }
 
@@ -643,6 +642,16 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     while(1) 
     {
+        //TODO all of this
+        //if this station has received any replies recently, start a timer
+        if (received_len > 0) {
+            //do time here
+        }
+
+        //when said timer goes off, send the route back to tcp
+        //char* route = choose_fastest_route();
+        //printf("route that should be sent to TCP = %s\n", route);
+
         //restat the timetable file
         stat(filename, &filestat);
         //if its been modified, reread the timetable, filter it, and update last_mtime
@@ -655,8 +664,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         }
 
         //add to readset
-        FD_CLR(tcpServerSocket,&readset);
-        FD_CLR(udpServerSocket,&readset);
+        FD_CLR(tcpServerSocket, &readset);
+        FD_CLR(udpServerSocket, &readset);
         FD_SET(tcpServerSocket, &readset);
         FD_SET(udpServerSocket, &readset);
 
@@ -767,14 +776,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         strcpy(visited_dict[visited_len], source_id);
                         visited_len++;
 
-                        //wait for all of the replies to get back
-                        //TODO how do i do this fuckkkk
-
-                        //pick the fastest route out of all the replies
-                        route = choose_fastest_route();
-
-                        //clear the received dict
-                        free(received_dict);
+                        //send a dummy route back for now, send a new tcp after receive responses
+                        route = "Searching...";
                     }
 
                 }
