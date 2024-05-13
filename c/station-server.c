@@ -782,7 +782,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         char* neighbor_route = find_fastest_route(destinationTimetable, afterTime);
 
                         if (neighbor_route == NULL) {
-                            printf("    %s: too late, go to bed loser\n", stationName);
+                            printf("    %s: ROUTE IS NULL FOR DESTINATION %s\n", stationName, neighbor_station->name);
                             continue;
                             //TODO too late in the day, send an R message back
                         }
