@@ -474,6 +474,9 @@ Station* name_to_station(char* neighbor) {
 int received_len;
 char** received_dict;
 
+//globally defined for replies later
+char* reply_destination;
+
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
     char* best_route;
@@ -644,16 +647,31 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     while(1) 
     {
-        //TODO all of this
-        //if this station has received any replies recently, start a timer
+
+        //if this station has received any UDP replies, and the sockets timeout has expired
         if (received_len > 0) {
-            //do timer here
+            //pick the fastest route out of all the possibilities
+            char* route = choose_fastest_route();
+
+            // Format the response message with the timetable information
+            char *responseBody = malloc(strlen("Fastest route to %s:\n%s") + strlen(route) + strlen(reply_destination));
+            if(responseBody == NULL) {malloc_error();}
+            sprintf(responseBody,"Fastest route to %s:\n%s", reply_destination, route);
+
+            // Format the HTTP response
+            char* response = generate_http_response(200, responseBody);
+
+            // Send the response back to the web interface
+            write(newSocket, response, strlen(response));
+
+            // Clean up the connection
+            printf("Closed after finding route\n");
+            close(newSocket);
+            //clear received dict
+            received_len = 0;
+
+
         }
-
-        //when said timer goes off, send the route back to tcp
-        //char* route = choose_fastest_route();
-        //printf("route that should be sent to TCP = %s\n", route);
-
 
         //restat the timetable file
         stat(filename, &filestat);
@@ -781,6 +799,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                         //send a dummy route back for now, send a new tcp after receive responses
                         route = "Searching...";
+
+                        //save the destination for the response
+                        reply_destination = destination;
                     }
 
                 }
@@ -791,25 +812,27 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if (route == NULL) {malloc_error();}
                     sprintf(route,"There is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
                 }
-                
-                // Format the response message with the timetable information
-                char *responseBody = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) + strlen(destination));
-                if(responseBody == NULL) {malloc_error();}
-                sprintf(responseBody,"Fastest route to %s:\n%s",destination,route);
 
-                // Format the HTTP response
-                char* response = generate_http_response(200, responseBody);
-
-                // Send the response back to the web interface
-                write(newSocket, response, strlen(response));
-
-                // Clean up the connection
                 if(strcmp(route, "Searching...") != 0) {
+                    // Format the response message with the timetable information
+                    char *responseBody = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) + strlen(destination));
+                    if(responseBody == NULL) {malloc_error();}
+                    sprintf(responseBody,"Fastest route to %s:\n%s",destination,route);
+
+                    // Format the HTTP response
+                    char* response = generate_http_response(200, responseBody);
+
+                    // Send the response back to the web interface
+                    write(newSocket, response, strlen(response));
+
+                    // Clean up the connection
                     printf("Closed after finding route\n");
                     close(newSocket);
                 }
 
             }
+
+
 
             //check if it is an udp connection
             if(FD_ISSET(udpServerSocket, &readset))
@@ -1125,9 +1148,10 @@ int main(int argc, char* argv[])
 
 //update current time from url parameter (super optional)
 
+//get rid of time to live
 //report found routes back to TCP
 //testing on a 5 node network
+//add message id's to R messages
 //send a special R message back if too late 
     //(no valid route, but they neighbour eachother)
     //if there is no proper R message, only these ones, then report back no valid route after time
-//
