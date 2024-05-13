@@ -3,7 +3,7 @@
 # written by Chris.McDonald@uwa.edu.au
 # thanks to:  https://en.clipdealer.com/vector/media/A:112583666
 
-HOST="0.0.0.0"	# assuming all stations on the same host
+HOST="localhost"	# assuming all stations on the same host
 LEAVE=`date '+%H:%M'`	# or set to a fixed value
 
 # ---------------------------------------

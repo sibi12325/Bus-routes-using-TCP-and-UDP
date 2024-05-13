@@ -8,7 +8,7 @@ import datetime
 import select
 import hashlib
 
-IP = 'locathost'
+IP = "localhost"
 
 
 def parse_destination(query):
@@ -21,7 +21,7 @@ def parse_destination(query):
             # Check if the path contains the destination
             if path.startswith('/?to='):
                 # Extract the destination
-                destination = path.split("?to=")[1]
+                destination = path.split("?to=")[1].split("&")[0]
                 return destination
     # If no destination is found, return None
     return None
@@ -86,11 +86,9 @@ def find_fastest_route(timetable, destination, after_time_str):
     return fastest_route
 
 
-def send_udp_own_station(client_fd, destination, station_name, query_port):
+def send_udp_own_station(client_fd, destination, station_name, query_port, leave_time):
     initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    t = time.localtime()
-    current_time = time.strftime("%H:%M", t)
-    msg = f"Q~{station_name}~{destination}~{client_fd}~{current_time}"
+    msg = f"Q~{station_name}~{destination}~{client_fd}~{leave_time}"
     initial_socket.sendto(msg.encode(), (IP, query_port))
     initial_socket.close()
 
@@ -104,6 +102,23 @@ def calculate_file_hash(file_name):
 
 def route_destination_time(route):
     return route[-1]
+
+def extract_time(message):
+    # Split the message by "&leave=" to separate the station name and time
+    parts = message.split("&leave=")
+    
+    # Check if "&leave=" exists in the string
+    if len(parts) < 2:
+        return None  # "&leave=" not found, return None
+    
+    # Extract the part after "&leave="
+    time_string = parts[1].split(" ")[0]
+    
+    # Replace "%3A" with ":"
+    time_string = time_string.replace("%3A", ":")
+    
+    return time_string
+
 
 def server(station_name, browser_port, query_port, neighbours):
 
@@ -153,7 +168,6 @@ def server(station_name, browser_port, query_port, neighbours):
                 connection, address = tcp_socket.accept()
                 request = connection.recv(1024).decode()
                 print(f"New TCP connection from {address}")
-                print(request)
                 if(request.startswith("GET")):
                     # Store the client socket and its file descriptor in the dictionary
                     client_fd = connection.fileno()
@@ -167,11 +181,10 @@ def server(station_name, browser_port, query_port, neighbours):
                         hash = new_hash
                     #get the destination if the source and destination are not connected
                     destination = parse_destination(request)
-                    t = time.localtime()
-                    current_time = time.strftime("%H:%M", t)
+                    leave_time = extract_time(request)
                     if(destination in timetable):
                         # if the station is connected send the route back to the webpage
-                        route = find_fastest_route(timetable, destination, current_time)
+                        route = find_fastest_route(timetable, destination, leave_time)
                         response = generate_http_response(route)
                         connection.sendall(response.encode())
                         poll_object.unregister(connection)
@@ -179,14 +192,15 @@ def server(station_name, browser_port, query_port, neighbours):
                         connection.close()
                     elif(destination is not None):
                         # if the station not connected send it udp server of this station
-                        send_udp_own_station(client_fd, destination, station_name, query_port)
+                        send_udp_own_station(client_fd, destination, station_name, query_port, leave_time)
                         
 
                 # this will send route to the webpage
                 elif (request.startswith("R")):
                     segment = data.decode().split("~")
-                    answer = f"Route to {parts[1]} from {station_name}:\n"
-                    answer += f"{parts[-1]}"
+                    answer = f"Route to {parts[1]} from {station_name} arrives at {parts[4]}:<br>"
+                    answer += f"{parts[5]}<br>"
+                    answer += f"{parts[6]}"
                     reply = generate_http_response(answer)
                     client_socket = client_sockets.get(int(segment[3]))
                     client_socket.sendall(reply.encode())
@@ -210,8 +224,11 @@ def server(station_name, browser_port, query_port, neighbours):
 
                 #If there is route to destination and sends it back
                 if(parts[0] == "M" and parts[2] in timetable):
-                    msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{route}"
-                    udp_socket.sendto(msg.encode(), address)
+                    route = find_fastest_route(timetable, parts[2], parts[4])
+                    if route != None:
+                        destination_time = route_destination_time(route)
+                        msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{destination_time}~{parts[5]}~{route}"
+                        udp_socket.sendto(msg.encode(), neighbour_address[parts[1]])
                 
                 #Recieve the station name and store it
                 elif (parts[0] == "I"):
@@ -237,7 +254,7 @@ def server(station_name, browser_port, query_port, neighbours):
                         if route != None:
                             destination_time = route_destination_time(route)
                             msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}"
-                            udp_socket.sendto(msg.encode(), neighbour)
+                            udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
 
                 #if the destination is not in the stations timetable then it send its own neighbours
                 elif(parts[0] == "M" and parts[2] not in timetable):
