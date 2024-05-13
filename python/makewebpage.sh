@@ -3,7 +3,7 @@
 # written by Chris.McDonald@uwa.edu.au
 # thanks to:  https://en.clipdealer.com/vector/media/A:112583666
 
-HOST="localhost"	# assuming all stations on the same host
+HOST="0.0.0.0"	# assuming all stations on the same host
 LEAVE=`date '+%H:%M'`	# or set to a fixed value
 
 # ---------------------------------------
@@ -82,9 +82,9 @@ cat << THE_END
     <td style="padding-left: 3em;"><input type="submit" value=" Let's go! "></td>
   </tr>
   </table>
-<!--
-  <input type="hidden" name="leave" value="$LEAVE">
--->
+
+  <<input type="text" name="leave" value="$LEAVE" pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]" title="Enter time in HH:MM format (24-hour)">
+
 </form>
 THE_END
     echo "</div>"
