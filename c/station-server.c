@@ -619,8 +619,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     //send identifying message to all neighbors
     printf("Sending identification messages from %s\n", stationName);
     for (int i = 0; i < num_neighbors; i++) {
-        printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
-
         //copying neighbors[i] into a new string so that strtok doesn't mutate the original
         char* neighbor = malloc(strlen(neighbors[i]) + 1); 
         if (neighbor == NULL) {malloc_error();}
@@ -630,6 +628,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         char* address = strtok(neighbor, ":");
         int port = atoi(strtok(NULL, ":"));
         send_a_udp_message(i_message, address, port);
+        printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
     }
 
     //create array for requests that have visited before
@@ -679,7 +678,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
             write(newSocket, response, strlen(response));
 
             // Clean up the connection
-            printf("\n%s\n", responseBody);
+            printf("%s\n", responseBody);
             printf("Closed after finding route\n");
             close(newSocket);
             //"clear" received dict
@@ -712,9 +711,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
             maxFileDescriptor = udpServerSocket;
         }
 
-        //declare and initialise the timeout value (currently 1 second)
+        //declare and initialise the timeout value (currently 3 seconds)
         struct timeval timeout;
-        timeout.tv_sec  = 1;
+        timeout.tv_sec  = 3;
         timeout.tv_usec = 0;
 
         //try and select a server socket (either udp or tcp)
@@ -800,8 +799,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         sprintf(m_message, "M~%s~%i~%s~%s~%s~%s", stationName, message_id, destination, new_afterTime, neighbor_route, stationName);
                         
                         //send message
-                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
 
                         //add this message's id to the dict of messages its seen
                         char* source_id = malloc(strlen(stationName) + 1 + 2);
@@ -921,10 +920,10 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     datagramParts = strtok(NULL, "~");
                     char *destStation = malloc(strlen(datagramParts) + 1);
                     if (destStation == NULL) {malloc_error();}
-                    strcpy(destStation,datagramParts);
+                    strcpy(destStation, datagramParts);
 
                     //if the destination is reached
-                    if(strcmp(destStation,stationName) == 0)
+                    if(strcmp(destStation, stationName) == 0)
                     {
                         printf("    %s: %s has reached its destination!\n", stationName, source_id);
 
@@ -1018,8 +1017,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         sprintf(m_message, "M~%s~%s~%s~%s~%s~%s", sourceStation, id, destStation, new_afterTime, new_routeSoFar, journeySoFar);
                         
                         //send message
-                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                     }
                 }
 
@@ -1060,16 +1059,19 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         continue;
                     }
 
-                    char *journey = malloc(strlen(datagramParts));
+                    char* journey = malloc(strlen(datagramParts));
                     if (journey == NULL) {malloc_error();}
                     strcpy(journey, datagramParts);
 
                     //get most recent stop on the journey
                     char* last_stop = strtok(datagramParts, "@");
-                    journey += strlen(last_stop) + 1; //increment pointer to cut off the first station (WHY IS IT 5???)
+                    printf("last stop %s\n", last_stop);
+                    journey += (strlen(last_stop)); //increment pointer to cut off the first station
+                    char* next_stop = strtok(NULL, "@");
+                    if(next_stop != NULL) {journey++;} //extra increment for the @
 
                     //construct the r message
-                    char* r_message = malloc(4 + strlen(route) + strlen(journey));
+                    char* r_message = malloc(3 + strlen(route) + strlen(journey));
                     if (r_message == NULL) {malloc_error();}
                     sprintf(r_message, "R~%s~%s", route, journey);
 
