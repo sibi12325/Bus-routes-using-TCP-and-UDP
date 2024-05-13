@@ -631,10 +631,12 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     //create array for requests that have visited before
     int visited_len = 0;
     char** visited_dict = malloc(visited_len * sizeof(char*));
+    if(visited_dict == NULL) {malloc_error();}
 
     //create array to store received routes in
     received_len = 0;
     received_dict = malloc(received_len * sizeof(char*));
+    if(received_dict == NULL) {malloc_error();}
 
     //used for select
     fd_set readset;
