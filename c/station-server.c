@@ -429,58 +429,6 @@ void send_a_udp_message(char* message, char* address, int port) {
     sendto(udpServerSocket, message, strlen(message), 0, (const struct sockaddr*)&destination, sizeof(destination));
 }
 
-char *get_ip_address() 
-{
-    int socket_fd;
-    struct sockaddr_in server_addr;
-    
-    //ip address has 15 characters + 1 for the null terminating character
-    char *ip = malloc(16);
-    if (ip == NULL) {malloc_error();}
-
-    //Create a udp socket
-    if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
-    {
-        perror("socket error\n");
-        exit(EXIT_FAILURE);
-    }
-
-    //ipv4 family
-    server_addr.sin_family = AF_INET;
-
-    //choose arbitrary port (I chose 9999 to avoid conflicts)
-    server_addr.sin_port = htons(9999);
-
-    //ip address is 8.8.8.8 (a public Google DNS server). Use this to avoid loopback interface (eg if something like 0.0.0.0 was chosen, ip address would become 127.0.0.1 instead) 
-    //inet_pton converts the string "8.8.8.8" into a struct in_addr object and stores it in server_addr
-    inet_pton(AF_INET, "8.8.8.8", &(server_addr.sin_addr));
-
-    //connects the socket to the server. It doesn’t send any data but it initialises the server_addr.
-    if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) 
-    {
-        perror("connection error\n");
-        close(socket_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    //gets the local ip address.
-    socklen_t length = sizeof(server_addr);
-    if (getsockname(socket_fd, (struct sockaddr*)&server_addr, &length) < 0) 
-    {
-        perror("getsockname error\n");
-        close(socket_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    //store the human readable format of ip into the ip variable
-    inet_ntop(AF_INET, &(server_addr.sin_addr), ip, 16);
-
-    //close the socket
-    close(socket_fd);
-
-    return ip;
-}
-
 //neighbors_len and neighbors_dict declared here for this function
 int neighbors_len;
 Station* neighbors_dict;
@@ -661,10 +609,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     neighbors_len = 0;
     neighbors_dict = malloc(neighbors_len * sizeof(Station));
 
-    char* IPaddress = get_ip_address();
-    char* i_message = malloc(5 + strlen(stationName) + strlen(IPaddress) + 4);
+    char* i_message = malloc(3 + strlen(stationName));
     if (i_message == NULL) {malloc_error();}
-    sprintf(i_message, "I~%s~%s~%i", stationName, IPaddress, query_port);
+    sprintf(i_message, "I~%s", stationName);
 
     //send identifying message to all neighbors
     printf("Sending identification messages from %s\n", stationName);
@@ -739,7 +686,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     perror("Accept failed");
                     exit(EXIT_FAILURE);
                 }
-                printf("\nConnection from %s to %s\n", inet_ntoa(client_addr.sin_addr), stationName);
+                printf("\nConnection from %s:%i to %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), stationName);
                 
                 // Receive the query from the web interface
                 char query[MAX_BUFFER_SIZE];
@@ -867,7 +814,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 // turn datagram into string
                 udpDatagram[numbytes] = '\0';
-                printf("    %s: Received %s\n", stationName, udpDatagram);
+                printf("    %s: Received %s from %s:%i\n", stationName, udpDatagram, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
                 //get components from datagram
                 char *datagramParts = strtok(udpDatagram, "~");
@@ -1105,15 +1052,12 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if (neighbors_dict[neighbors_len].name == NULL) {malloc_error();}
                     strcpy(neighbors_dict[neighbors_len].name, datagramParts);
 
-                    //get address
-                    datagramParts = strtok(NULL,"~");
+                    //add address and port to dict
                     neighbors_dict[neighbors_len].address = malloc(strlen(datagramParts) + 1);
                     if (neighbors_dict[neighbors_len].address == NULL) {malloc_error();}
-                    strcpy(neighbors_dict[neighbors_len].address, datagramParts);
+                    strcpy(neighbors_dict[neighbors_len].address, inet_ntoa(client_addr.sin_addr));
 
-                    //get port
-                    datagramParts = strtok(NULL,"~");
-                    neighbors_dict[neighbors_len].port = atoi(datagramParts);
+                    neighbors_dict[neighbors_len].port = ntohs(client_addr.sin_port);
 
                     printf("    %s: Added to neighbors_dict %s = %s:%i\n", stationName, neighbors_dict[neighbors_len].name, 
                     neighbors_dict[neighbors_len].address, neighbors_dict[neighbors_len].port);
