@@ -647,12 +647,13 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         //TODO all of this
         //if this station has received any replies recently, start a timer
         if (received_len > 0) {
-            //do time here
+            //do timer here
         }
 
         //when said timer goes off, send the route back to tcp
         //char* route = choose_fastest_route();
         //printf("route that should be sent to TCP = %s\n", route);
+
 
         //restat the timetable file
         stat(filename, &filestat);
@@ -803,8 +804,11 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 write(newSocket, response, strlen(response));
 
                 // Clean up the connection
-                printf("Closed after finding route\n");
-                close(newSocket);
+                if(strcmp(route, "Searching...") != 0) {
+                    printf("Closed after finding route\n");
+                    close(newSocket);
+                }
+
             }
 
             //check if it is an udp connection
@@ -961,7 +965,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         Timetable destinationTimetable = destination_timetable(filteredTimetable, neighbor_station->name);
                         char* route = find_fastest_route(destinationTimetable, currentTime);
                         if (route == NULL) {
-                            printf("too late, go to bed loser\n");
+                            printf("    %s: too late, go to bed loser\n", stationName);
+                            continue;
                             //TODO too late in the day, send an R message back
                         }
 
@@ -1114,3 +1119,15 @@ int main(int argc, char* argv[])
     printf("%s has closed\n", station_name);
     return 0;
 }
+
+//sliding window
+//acknowledgements
+
+//update current time from url parameter (super optional)
+
+//report found routes back to TCP
+//testing on a 5 node network
+//send a special R message back if too late 
+    //(no valid route, but they neighbour eachother)
+    //if there is no proper R message, only these ones, then report back no valid route after time
+//
