@@ -44,8 +44,13 @@ char* parse_destination(char* query)
                 char* destination = strtok(path, "?=");
                 destination = strtok(NULL, "?=");
                 destination = strtok(NULL, "?=");
+
+                //remove url parameters
+                //TODO save the url param as the afterTime
+                char* final_destination = strtok(destination, "&");
+                
                 //return the destination if found
-                return destination;
+                return final_destination;
             }
         }
 
@@ -370,7 +375,7 @@ Timetable destination_timetable(Timetable timetable, char *destination)
 }
 
 //find the fastest route from a timetable of routes (provided it is after the aftertime)
-char *find_fastest_route(Timetable allDestinationTimetable,char *after_time_str) 
+char *find_fastest_route(Timetable allDestinationTimetable, char *after_time_str) 
 {
     //turn after time into mins
     int afterTimeMins = getMins(after_time_str);
@@ -509,12 +514,44 @@ Station* name_to_station(char* neighbor) {
 
     //search for matching name in neighbors_dict
     for (int i = 0; i < neighbors_len; i++) {
-        if (neighbors_dict[i].name == neighbor) {
+        if (strcmp(neighbors_dict[i].name, neighbor) == 0) {
             *(return_station) = neighbors_dict[i];
         }
     }
 
     return return_station;
+}
+
+//received_len and received_dict declared here for this function
+int received_len;
+char** received_dict;
+
+//once all the R messages have returned, searches them for the fastest one, saves that as the route
+char* choose_fastest_route() {
+    char* best_route = received_dict[received_len];
+    printf("%s\n", best_route);
+    char* fastest_time = "23:59";
+    for (int i = 0; i < received_len; i++) {
+        char* arrive_time = malloc(strlen(received_dict[i]) + 1);
+        if (arrive_time == NULL) {malloc_error();}
+        //slicing from -7 to -2
+        strncpy(arrive_time, received_dict[i] + strlen(received_dict[i])-7, 5);
+
+        if (strcmp(arrive_time, fastest_time) < 0) { //negative value if arrive less than fastest
+            strcpy(fastest_time, arrive_time);
+            best_route = received_dict[0];
+        }
+    }
+
+    //replace \@s with line breaks
+    for (int i = 0; i < strlen(best_route); i++) {
+        if (best_route[i] == '@') {
+            best_route[i] = '\n';
+        }
+    }
+
+    printf("%s\n", best_route);
+    return best_route;
 }
 
 #define MAX_BUFFER_SIZE 1024
@@ -647,10 +684,11 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     //create array for requests that have visited before
     int visited_len = 0;
-    char** visited_dict = malloc(neighbors_len * sizeof(char*));
+    char** visited_dict = malloc(visited_len * sizeof(char*));
 
-    //bool used to drop packets
-    bool drop_packet = false;
+    //create array to store received routes in
+    received_len = 0;
+    received_dict = malloc(received_len * sizeof(char*));
 
     //used for select
     fd_set readset;
@@ -774,12 +812,22 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         if (source_id == NULL) {malloc_error();}
                         sprintf(source_id, "%s@%i", stationName, message_id);
                         
+                        //add the message about to be sent to the visited dict
                         visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
                         if (visited_dict == NULL) {malloc_error();}
                         visited_dict[visited_len] = malloc(strlen(source_id) + 1);
                         if (visited_dict[visited_len] == NULL) {malloc_error();}
                         strcpy(visited_dict[visited_len], source_id);
                         visited_len++;
+
+                        //wait for all of the replies to get back
+                        //TODO how do i do this fuckkkk
+
+                        //pick the fastest route out of all the replies
+                        route = choose_fastest_route();
+
+                        //clear the received dict
+                        free(received_dict);
                     }
 
                 }
@@ -851,6 +899,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     sprintf(source_id, "%s@%s", sourceStation, id);
 
                     //if the request has visited here previously
+                    bool drop_packet = false;
                     for (int j = 0; j < visited_len; j++){
                         if(strcmp(visited_dict[j], source_id) == 0) {
                             //DROP PACKET
@@ -878,7 +927,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if(strcmp(destStation,stationName) == 0)
                     {
                         printf("    %s: %s has reached its destination!\n", stationName, source_id);
-                        drop_packet = true;
 
                         //aftertime
                         datagramParts = strtok(NULL, "~");
@@ -898,9 +946,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         strcpy(journey, datagramParts);
 
                         //get most recent stop on the journey
-                        printf("%s\n", journey);
-                        char* last_stop = strtok(journey, "@");
-                        printf("%s\n", journey);
+                        char* last_stop = strtok(datagramParts, "@");
+                        journey += strlen(last_stop) + 1; //increment pointer to cut off the first station
 
                         //construct the r message
                         char* r_message = malloc(4 + strlen(route) + strlen(journey));
@@ -911,9 +958,10 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         Station* last_station = name_to_station(last_stop);
                         send_a_udp_message(r_message, last_station->address, last_station->port);
                         printf("    %s: Sent %s to %s\n", stationName, r_message, last_station->name);
+
+                        //dont relay m message any further
+                        continue;
                     }
-                    //break and don't relay M message further
-                    if(drop_packet) {drop_packet = false; continue;}
 
                     //aftertime
                     datagramParts = strtok(NULL, "~");
@@ -930,9 +978,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if(timeToLive == 0)
                     {
                         printf("    %s: Dropped %s (time to live expired)\n", stationName, source_id);
-                        drop_packet = true;
+                        continue;
                     }
-                    if(drop_packet) {drop_packet = false; continue;}
                     timeToLive--;
 
                     //route
@@ -1002,7 +1049,46 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //packet will reuse journey in reverse to trace steps back
                 if(strcmp(messageType,"R") == 0)
                 {
-                    //TODO
+                    //route
+                    datagramParts = strtok(NULL, "~");
+                    char *route = malloc(strlen(datagramParts) + 1);
+                    if (route == NULL) {malloc_error();}
+                    strcpy(route, datagramParts);
+
+                    //journey
+                    datagramParts = strtok(NULL, "~");
+                    if (datagramParts == NULL) { // if journey as null, has reached destination
+                        printf("    %s: Reply has reached its source!\n", stationName);
+
+                        //add R messages route to the received dict
+                        received_dict = realloc(received_dict, (received_len + 1) * sizeof(char*));
+                        if (received_dict == NULL) {malloc_error();}
+                        received_dict[received_len] = malloc(strlen(route) + 1);
+                        if (received_dict[received_len] == NULL) {malloc_error();}
+                        strcpy(received_dict[received_len], route);
+                        received_len++;
+
+                        printf("    %s: Added to received_dict %s\n", stationName, route);
+                        continue;
+                    }
+
+                    char *journey = malloc(strlen(datagramParts) + strlen(stationName) + 2);
+                    if (journey == NULL) {malloc_error();}
+                    strcpy(journey, datagramParts);
+
+                    //get most recent stop on the journey
+                    char* last_stop = strtok(datagramParts, "@");
+                    journey += strlen(last_stop) + 1; //increment pointer to cut off the first station
+
+                    //construct the r message
+                    char* r_message = malloc(4 + strlen(route) + strlen(journey));
+                    if (r_message == NULL) {malloc_error();}
+                    sprintf(r_message, "R~%s~%s", route, journey);
+
+                    //send the r message to the most recent stop on journey
+                    Station* last_station = name_to_station(last_stop);
+                    send_a_udp_message(r_message, last_station->address, last_station->port);
+                    printf("    %s: Sent %s to %s\n", stationName, r_message, last_station->name);
                 }
 
                 //I, for initialise, sends name, IP and address to neighboring servers on startup
@@ -1076,5 +1162,6 @@ int main(int argc, char* argv[])
     // Start the server with the provided configuration
     start_server(station_name, browser_port, query_port, neighbors, count);
 
+    printf("%s has closed\n", station_name);
     return 0;
 }
