@@ -82,6 +82,11 @@ def find_fastest_route(timetable, destination, after_time_str):
             if fastest_duration is None or duration < fastest_duration:
                 fastest_duration = duration
                 fastest_route = entry
+    
+    # no more routes available in timetable 
+    if fastest_route == None:
+        msg = f"No more journeys from {station_name} to {destination} after {after_time_str} today."
+        return msg
 
     return fastest_route
 
