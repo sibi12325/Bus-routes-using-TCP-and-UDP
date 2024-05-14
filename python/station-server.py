@@ -228,6 +228,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     hash = new_hash
 
                 #If there is route to destination and sends it back
+                # need ack
                 if(parts[0] == "M" and parts[2] in timetable):
                     route = find_fastest_route(timetable, parts[2], parts[4])
                     if route != None:
@@ -241,6 +242,7 @@ def server(station_name, browser_port, query_port, neighbours):
 
 
                 #this will send msg back to the tcp server
+                # need ack
                 elif(parts[0] == "R" and parts[2] == station_name):
                     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     tcp_send_back.connect((IP, browser_port))
@@ -248,20 +250,18 @@ def server(station_name, browser_port, query_port, neighbours):
                     tcp_send_back.close()
 
                 # deals with the query sent from it stations own tcp server and sends to neighbours
+                # need ack
                 elif(parts[0] == "Q" and parts[1] == station_name):
-                    ack = False
-                    if ack == True:
-                        msg_type = "A"
-                    else:
-                        msg_type = "M"
                     for neighbour in neighbour_address.keys():
                         route = find_fastest_route(timetable, neighbour, parts[4])
                         if route != None:
                             destination_time = route_destination_time(route)
+                            msg_type = "M"
                             msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
 
-                #if the destination is not in the stations timetable then it send its own neighbours
+                # if the destination is not in the stations timetable then it send its own neighbours
+                # need ack
                 elif(parts[0] == "M" and parts[2] not in timetable):
                     msg_type = "M"
                     msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}"
