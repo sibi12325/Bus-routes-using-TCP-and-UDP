@@ -713,7 +713,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
         //declare and initialise the timeout value (currently 3 seconds)
         struct timeval timeout;
-        timeout.tv_sec  = 3;
+        timeout.tv_sec  = 1;
         timeout.tv_usec = 0;
 
         //try and select a server socket (either udp or tcp)
@@ -765,6 +765,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 //if station does not neighbor the destination, send out UDP request
                 if (!neighbors_destination) {
+                    message_id++;
                     //construct the initial M message, send it to all neighbors
                     //M~source_station_name~destination_station_name~time~route~journey
                     for (int i = 0; i < num_neighbors; i++) {
@@ -793,7 +794,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         strncpy(new_afterTime, neighbor_route + strlen(neighbor_route)-7, 5);
 
                         //construct initial m message
-                        message_id++;
                         char* m_message = malloc(8 + strlen(stationName)*2 + 1 + strlen(destination) + 5 + strlen(neighbor_route));
                         if (m_message == NULL) {malloc_error();}
                         sprintf(m_message, "M~%s~%i~%s~%s~%s~%s", stationName, message_id, destination, new_afterTime, neighbor_route, stationName);
