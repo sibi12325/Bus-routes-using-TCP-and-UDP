@@ -662,7 +662,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         if (timer - 10 > first_response) {
             first_response = 99999999999999999;
 
-            printf("    %s: Picking fastest route out of %i responses\n", stationName, received_len);
+            printf("    %s: Picking fastest route out of %i response(s)\n", stationName, received_len);
             //pick the fastest route out of all the possibilities
             char* route = choose_fastest_route();
 
@@ -1133,7 +1133,7 @@ int main(int argc, char* argv[])
     char* station_name = argv[1];
     int browser_port = atoi(argv[2]);
     int query_port = atoi(argv[3]);
-    char** neighbors = calloc(1,sizeof(char *));
+    char** neighbors = malloc(sizeof(char *));
 
     //can have many neighbors so add all command line arguments after 3 into neighbors
     if(neighbors == NULL) {malloc_error();}
@@ -1141,7 +1141,7 @@ int main(int argc, char* argv[])
     for(int i = 4; i < argc; i++)
     {
         neighbors[count] = argv[i];
-        neighbors = (char **)realloc(neighbors, (count + 1)*sizeof(char *));
+        neighbors = realloc(neighbors, (count + 1) * sizeof(char *) + 1);
         if(neighbors == NULL) {malloc_error();}
         count++;
     }
@@ -1159,6 +1159,5 @@ int main(int argc, char* argv[])
 //update current time from url parameter (super optional)
 
 //add message id's to R messages
-//send a special R message back if too late 
-    //(no valid route, but they neighbour eachother)
-    //if there is no proper R message, only these ones, then report back no valid route after time
+//send a special R message back if too late
+//real dataset
