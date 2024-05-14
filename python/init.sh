@@ -1,6 +1,8 @@
 # initialise everything
 
-pkill -f station-server # kill all processes
+# kill all processes
+pkill -f station-server 
+killall station*
 
 # cleanup
 find . -name 'tt-*' -exec rm {} \;
