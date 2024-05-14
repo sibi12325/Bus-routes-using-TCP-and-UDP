@@ -40,13 +40,11 @@ preview md in vscode: `ctrl+shift+v` • md formatting: https://www.markdownguid
 - [X] C: UDP connection to another server
 - [X] C: Read/Store/Update station timetables 
 - [X] C: Implement a protocol for communication 
-- [ ] C: Convert client requests to server format
-- [ ] C: Convert server responses to client format
 - [ ] C: Communicate between multiple computers
 - [X] C: Find valid, one distance, route
-- [ ] C: Find valid, multi stop, routes
-- [ ] C: Find valid routes with cycles present
+- [X] C: Find valid, multi stop, routes
+- [X] C: Find valid routes with cycles present
 - [ ] C: Find non-valid routes
-- [ ] C: Find the fastest route (optional?)
+- [X] C: Find the fastest route (optional?)
 - [ ] C: Be able to handle real data, 20 stations
 - [ ] C: Be able to handle multiple outgoing requests at once
