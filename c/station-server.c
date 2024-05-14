@@ -63,7 +63,6 @@ char* parse_destination(char* query)
 }
 
 #define MAX_LINE_LENGTH 256
-#define TIME_TO_LIVE 32
 
 //structure storing each entry of the timetable
 typedef struct 
@@ -474,6 +473,9 @@ Station* name_to_station(char* neighbor) {
 int received_len;
 char** received_dict;
 
+//globally defined for replies later
+char* reply_destination;
+
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
     char* best_route;
@@ -519,27 +521,29 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
     //get the current time (time the webpage was created) for use in calculations
     time_t rawtime;
-    struct tm * currentTime;
+    struct tm * realTime;
     time(&rawtime);
-    currentTime = localtime(&rawtime);
+    realTime = localtime(&rawtime);
 
     //turn time into string
-    char *afterTime = malloc(strlen(":") + 4);
+    char *afterTime = malloc(strlen(":") + 5);
     char *hour = malloc(3);
     char *minute = malloc(3);
     if (afterTime == NULL || hour == NULL || minute == NULL) {malloc_error();}
 
     //add padding 0 if hour or minute < 10
-    if (currentTime->tm_hour < 10) {
-        sprintf (hour, "%02d", currentTime->tm_hour);
+    if (realTime->tm_hour < 10) {
+        sprintf (hour, "%02d", realTime->tm_hour);
     } else {
-        sprintf (hour, "%d", currentTime->tm_hour);
-    } if (currentTime->tm_min < 10) {
-        sprintf (minute, "%02d", currentTime->tm_min);
+        sprintf (hour, "%d", realTime->tm_hour);
+    } if (realTime->tm_min < 10) {
+        sprintf (minute, "%02d", realTime->tm_min);
     } else {
-        sprintf (minute, "%d", currentTime->tm_min);
+        sprintf (minute, "%d", realTime->tm_min);
     }
     sprintf(afterTime,"%s:%s",hour, minute);
+    //overwrite time for testing
+    sprintf(afterTime,"%s", "06:00");
 
     //get filtered timetable
     Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
@@ -615,8 +619,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     //send identifying message to all neighbors
     printf("Sending identification messages from %s\n", stationName);
     for (int i = 0; i < num_neighbors; i++) {
-        printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
-
         //copying neighbors[i] into a new string so that strtok doesn't mutate the original
         char* neighbor = malloc(strlen(neighbors[i]) + 1); 
         if (neighbor == NULL) {malloc_error();}
@@ -626,6 +628,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         char* address = strtok(neighbor, ":");
         int port = atoi(strtok(NULL, ":"));
         send_a_udp_message(i_message, address, port);
+        printf("    %s: Sent %s to %s\n", stationName, i_message, neighbors[i]);
     }
 
     //create array for requests that have visited before
@@ -642,18 +645,45 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     fd_set readset;
     int maxFileDescriptor;
 
+    //used for a timer
+    clock_t first_response = 99999999999999999;
+    clock_t timer;
+
     while(1) 
     {
-        //TODO all of this
-        //if this station has received any replies recently, start a timer
-        if (received_len > 0) {
-            //do timer here
+
+        //if this station has received any UDP replies, start a timer
+        if (received_len > 0 && first_response == 99999999999999999) {
+            //start a 1 second timer
+            first_response = clock();
         }
 
-        //when said timer goes off, send the route back to tcp
-        //char* route = choose_fastest_route();
-        //printf("route that should be sent to TCP = %s\n", route);
+        timer = clock();
+        if (timer - 10 > first_response) {
+            first_response = 99999999999999999;
 
+            printf("    %s: Picking fastest route out of %i response(s)\n", stationName, received_len);
+            //pick the fastest route out of all the possibilities
+            char* route = choose_fastest_route();
+
+            // Format the response message with the timetable information
+            char *responseBody = malloc(strlen("Fastest route to %s:\n%s") + strlen(route) + strlen(reply_destination));
+            if(responseBody == NULL) {malloc_error();}
+            sprintf(responseBody,"Fastest route to %s:\n%s", reply_destination, route);
+
+            // Format the HTTP response
+            char* response = generate_http_response(200, responseBody);
+
+            // Send the response back to the web interface
+            write(newSocket, response, strlen(response));
+
+            // Clean up the connection
+            printf("%s\n", responseBody);
+            printf("Closed after finding route\n");
+            close(newSocket);
+            //"clear" received dict
+            received_len = 0;
+        }
 
         //restat the timetable file
         stat(filename, &filestat);
@@ -681,9 +711,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
             maxFileDescriptor = udpServerSocket;
         }
 
-        //declare and initialise the timeout value (currently 10 seconds)
+        //declare and initialise the timeout value (currently 3 seconds)
         struct timeval timeout;
-        timeout.tv_sec  = 10;
+        timeout.tv_sec  = 3;
         timeout.tv_usec = 0;
 
         //try and select a server socket (either udp or tcp)
@@ -736,7 +766,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //if station does not neighbor the destination, send out UDP request
                 if (!neighbors_destination) {
                     //construct the initial M message, send it to all neighbors
-                    //M~source_station_name~destination_station_name~time~timetolive~route~journey
+                    //M~source_station_name~destination_station_name~time~route~journey
                     for (int i = 0; i < num_neighbors; i++) {
                         //copying neighbors[i] into a new string so that strtok doesn't mutate the original
                         char* neighbor = malloc(strlen(neighbors[i]) + 1); 
@@ -744,27 +774,33 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         strcpy(neighbor, neighbors[i]);
 
                         //getting a station object for the neighbor
-                        Station* neighbor_station = ip_to_station(neighbors[i]);
+                        Station* neighbor_station = ip_to_station(neighbor);
 
                         //find fastest route to neighbor
                         Timetable destinationTimetable = destination_timetable(filteredTimetable, neighbor_station->name);
-                        route = find_fastest_route(destinationTimetable, afterTime);
+                        char* neighbor_route = find_fastest_route(destinationTimetable, afterTime);
+
+                        if (neighbor_route == NULL) {
+                            printf("    %s: ROUTE IS NULL FOR DESTINATION %s\n", stationName, neighbor_station->name);
+                            continue;
+                            //TODO too late in the day, send an R message back
+                        }
 
                         //extract the last arrival time from route
-                        char* new_afterTime = malloc(strlen(route) + 1);
+                        char* new_afterTime = malloc(strlen(neighbor_route) + 1);
                         if (new_afterTime == NULL) {malloc_error();}
                         //slicing from -7 to -2
-                        strncpy(new_afterTime, route + strlen(route)-7, 5);
+                        strncpy(new_afterTime, neighbor_route + strlen(neighbor_route)-7, 5);
 
                         //construct initial m message
                         message_id++;
-                        char* m_message = malloc(9 + strlen(stationName)*2 + 1 + strlen(destination) + 5 + 2 + strlen(route));
+                        char* m_message = malloc(8 + strlen(stationName)*2 + 1 + strlen(destination) + 5 + strlen(neighbor_route));
                         if (m_message == NULL) {malloc_error();}
-                        sprintf(m_message, "M~%s~%i~%s~%s~%i~%s~%s", stationName, message_id, destination, new_afterTime, TIME_TO_LIVE, route, stationName);
+                        sprintf(m_message, "M~%s~%i~%s~%s~%s~%s", stationName, message_id, destination, new_afterTime, neighbor_route, stationName);
                         
                         //send message
-                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
 
                         //add this message's id to the dict of messages its seen
                         char* source_id = malloc(strlen(stationName) + 1 + 2);
@@ -778,10 +814,13 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         if (visited_dict[visited_len] == NULL) {malloc_error();}
                         strcpy(visited_dict[visited_len], source_id);
                         visited_len++;
-
-                        //send a dummy route back for now, send a new tcp after receive responses
-                        route = "Searching...";
                     }
+
+                    //dummy status so that it doesn't close socket or write yet
+                    route = "Searching...";
+
+                    //save the destination for the response
+                    reply_destination = destination;
 
                 }
 
@@ -791,25 +830,29 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if (route == NULL) {malloc_error();}
                     sprintf(route,"There is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
                 }
-                
-                // Format the response message with the timetable information
-                char *responseBody = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) + strlen(destination));
-                if(responseBody == NULL) {malloc_error();}
-                sprintf(responseBody,"Fastest route to %s:\n%s",destination,route);
 
-                // Format the HTTP response
-                char* response = generate_http_response(200, responseBody);
-
-                // Send the response back to the web interface
-                write(newSocket, response, strlen(response));
-
-                // Clean up the connection
                 if(strcmp(route, "Searching...") != 0) {
+                    // Format the response message with the timetable information
+                    char *responseBody = malloc(strlen("Fastest route to :%s\n%s") + strlen(route) + strlen(destination));
+                    if(responseBody == NULL) {malloc_error();}
+                    sprintf(responseBody,"Fastest route to %s:\n%s",destination,route);
+
+                    // Format the HTTP response
+                    char* response = generate_http_response(200, responseBody);
+
+                    // Send the response back to the web interface
+                    write(newSocket, response, strlen(response));
+                    
+
+                    // Clean up the connection
+                    printf("    %s: Sent response %s\n", stationName, responseBody);
                     printf("Closed after finding route\n");
                     close(newSocket);
                 }
 
             }
+
+
 
             //check if it is an udp connection
             if(FD_ISSET(udpServerSocket, &readset))
@@ -832,7 +875,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 strcpy(messageType, datagramParts);
 
                 //M, for message, message sent from source to destination
-                //format: M~source_station_name~destination_station_name~time~timetolive~route~journey
+                //format: M~source_station_name~destination_station_name~time~route~journey
                 //route is the list of bus/train routes to deliver to the user
                 //journey is the list of station servers visited by the packet
                 if(strcmp(messageType, "M") == 0)
@@ -877,16 +920,14 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     datagramParts = strtok(NULL, "~");
                     char *destStation = malloc(strlen(datagramParts) + 1);
                     if (destStation == NULL) {malloc_error();}
-                    strcpy(destStation,datagramParts);
+                    strcpy(destStation, datagramParts);
 
                     //if the destination is reached
-                    if(strcmp(destStation,stationName) == 0)
+                    if(strcmp(destStation, stationName) == 0)
                     {
                         printf("    %s: %s has reached its destination!\n", stationName, source_id);
 
                         //aftertime
-                        datagramParts = strtok(NULL, "~");
-                        //time to live
                         datagramParts = strtok(NULL, "~");
 
                         //route
@@ -923,20 +964,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     datagramParts = strtok(NULL, "~");
                     char *currentTime = malloc(strlen(datagramParts) + 1);
                     if (currentTime == NULL) {malloc_error();}
-                    strcpy(currentTime,datagramParts);
-
-                    //time to live
-                    datagramParts = strtok(NULL, "~");
-                    char *timeToLiveStr = malloc(strlen(datagramParts) + 1);
-                    if (timeToLiveStr == NULL) {malloc_error();}
-                    strcpy(timeToLiveStr,datagramParts);
-                    int timeToLive = atoi(timeToLiveStr);
-                    if(timeToLive == 0)
-                    {
-                        printf("    %s: Dropped %s (time to live expired)\n", stationName, source_id);
-                        continue;
-                    }
-                    timeToLive--;
+                    strcpy(currentTime, datagramParts);
 
                     //route
                     datagramParts = strtok(NULL, "~");
@@ -958,14 +986,16 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         strcpy(neighbor, neighbors[i]);
 
                         //getting a station object for the neighbor
-                        Station* neighbor_station = ip_to_station(neighbors[i]);
+                        Station* neighbor_station = ip_to_station(neighbor);
 
                         //find fastest route to neighbor
-                        filteredTimetable = filter_timetable(filteredTimetable, currentTime);
-                        Timetable destinationTimetable = destination_timetable(filteredTimetable, neighbor_station->name);
-                        char* route = find_fastest_route(destinationTimetable, currentTime);
+                        Timetable newStationTimetable = read_timetable(filename);
+                        Timetable newFilteredTimetable = filter_timetable(newStationTimetable, currentTime);
+                        Timetable newDestinationTimetable = destination_timetable(newFilteredTimetable, neighbor_station->name);
+                        char* route = find_fastest_route(newDestinationTimetable, currentTime);
+
                         if (route == NULL) {
-                            printf("    %s: too late, go to bed loser\n", stationName);
+                            printf("    %s: go to bed loser\n", stationName);
                             continue;
                             //TODO too late in the day, send an R message back
                         }
@@ -982,13 +1012,13 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         sprintf(new_routeSoFar, "%s@%s", routeSoFar, route);
 
                         //construct new m message
-                        char* m_message = malloc(9 + strlen(sourceStation) + strlen(id) + strlen(destStation) + 5 + 2 + strlen(new_routeSoFar) + strlen(journeySoFar));
+                        char* m_message = malloc(8 + strlen(sourceStation) + strlen(id) + strlen(destStation) + 5 + strlen(new_routeSoFar) + strlen(journeySoFar));
                         if (m_message == NULL) {malloc_error();}
-                        sprintf(m_message, "M~%s~%s~%s~%s~%i~%s~%s", sourceStation, id, destStation, new_afterTime, timeToLive, new_routeSoFar, journeySoFar);
+                        sprintf(m_message, "M~%s~%s~%s~%s~%s~%s", sourceStation, id, destStation, new_afterTime, new_routeSoFar, journeySoFar);
                         
                         //send message
-                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                         send_a_udp_message(m_message, neighbor_station->address, neighbor_station->port);
+                        printf("    %s: Sent %s to %s\n", stationName, m_message, neighbor_station->name);
                     }
                 }
 
@@ -1029,16 +1059,19 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         continue;
                     }
 
-                    char *journey = malloc(strlen(datagramParts) + strlen(stationName) + 2);
+                    char* journey = malloc(strlen(datagramParts));
                     if (journey == NULL) {malloc_error();}
                     strcpy(journey, datagramParts);
 
                     //get most recent stop on the journey
                     char* last_stop = strtok(datagramParts, "@");
-                    journey += strlen(last_stop) + 1; //increment pointer to cut off the first station
+                    printf("last stop %s\n", last_stop);
+                    journey += (strlen(last_stop)); //increment pointer to cut off the first station
+                    char* next_stop = strtok(NULL, "@");
+                    if(next_stop != NULL) {journey++;} //extra increment for the @
 
                     //construct the r message
-                    char* r_message = malloc(4 + strlen(route) + strlen(journey));
+                    char* r_message = malloc(3 + strlen(route) + strlen(journey));
                     if (r_message == NULL) {malloc_error();}
                     sprintf(r_message, "R~%s~%s", route, journey);
 
@@ -1100,7 +1133,7 @@ int main(int argc, char* argv[])
     char* station_name = argv[1];
     int browser_port = atoi(argv[2]);
     int query_port = atoi(argv[3]);
-    char** neighbors = calloc(1,sizeof(char *));
+    char** neighbors = malloc(sizeof(char *));
 
     //can have many neighbors so add all command line arguments after 3 into neighbors
     if(neighbors == NULL) {malloc_error();}
@@ -1108,7 +1141,7 @@ int main(int argc, char* argv[])
     for(int i = 4; i < argc; i++)
     {
         neighbors[count] = argv[i];
-        neighbors = (char **)realloc(neighbors, (count + 1)*sizeof(char *));
+        neighbors = realloc(neighbors, (count + 1) * sizeof(char *) + 1);
         if(neighbors == NULL) {malloc_error();}
         count++;
     }
@@ -1125,9 +1158,6 @@ int main(int argc, char* argv[])
 
 //update current time from url parameter (super optional)
 
-//report found routes back to TCP
-//testing on a 5 node network
-//send a special R message back if too late 
-    //(no valid route, but they neighbour eachother)
-    //if there is no proper R message, only these ones, then report back no valid route after time
-//
+//add message id's to R messages
+//send a special R message back if too late
+//real dataset
