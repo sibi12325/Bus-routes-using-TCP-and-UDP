@@ -93,7 +93,7 @@ def find_fastest_route(timetable, destination, after_time_str):
 
 def send_udp_own_station(client_fd, destination, station_name, query_port, leave_time):
     initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    msg = f"Q~{station_name}~{destination}~{client_fd}~{leave_time}"
+    msg = f"Q~{station_name}~{client_fd}~{destination}~{leave_time}"
     initial_socket.sendto(msg.encode(), (IP, query_port))
     initial_socket.close()
 
@@ -229,8 +229,8 @@ def server(station_name, browser_port, query_port, neighbours):
 
                 #If there is route to destination and sends it back
                 # need ack
-                if(parts[0] == "M" and parts[2] in timetable):
-                    route = find_fastest_route(timetable, parts[2], parts[4])
+                if(parts[0] == "M" and parts[3] in timetable):
+                    route = find_fastest_route(timetable, parts[3], parts[4])
                     if route != None:
                         destination_time = route_destination_time(route)
                         msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{destination_time}~{parts[5]}~{route}"
@@ -243,7 +243,7 @@ def server(station_name, browser_port, query_port, neighbours):
 
                 #this will send msg back to the tcp server
                 # need ack
-                elif(parts[0] == "R" and parts[2] == station_name):
+                elif(parts[0] == "R" and parts[3] == station_name):
                     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     tcp_send_back.connect((IP, browser_port))
                     tcp_send_back.sendall(data)
@@ -254,20 +254,29 @@ def server(station_name, browser_port, query_port, neighbours):
                 elif(parts[0] == "Q" and parts[1] == station_name):
                     for neighbour in neighbour_address.keys():
                         route = find_fastest_route(timetable, neighbour, parts[4])
-                        if route != None:
+                        if route != None and route_destination_time(route) < '24:00':
                             destination_time = route_destination_time(route)
                             msg_type = "M"
-                            msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}"
+                            msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}~{station_name}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
 
                 # if the destination is not in the stations timetable then it send its own neighbours
                 # need ack
-                elif(parts[0] == "M" and parts[2] not in timetable):
-                    msg_type = "M"
-                    msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}"
-                    for neighbour in neighbours:
-                        if neighbour != address: #checks to see if neighbour isnt the same as the where msg came from
-                            udp_socket.sendto(msg.encode(), neighbour)
+                elif(parts[0] == "M" and parts[3] not in timetable):
+                    journey = parts[6].split('@')
+                    routes = parts[5].split('@')
+                    for neighbour in neighbour_address.keys():
+                        msg_type = "M"
+                        route = find_fastest_route(timetable, neighbour, parts[4])
+                        if neighbour_address[neighbour] != address: #checks to see if neighbour isnt the same as the where msg came from
+                            if route != None and route_destination_time(route) < '24:00':
+                                destination_time = route_destination_time(route)
+                                journey.append(station_name)
+                                routes.append(route)
+                                routes = "@".join(routes)
+                                journey = "@".join(journey)
+                                msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{routes}~{journey}"
+                                udp_socket.sendto(msg.encode(), neighbour)
                 
 if __name__ == "__main__":
     # Check if the correct number of command line arguments are provided
