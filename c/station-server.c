@@ -791,7 +791,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         //add this message's id to the dict of messages its seen
                         char* source_id = malloc(strlen(stationName) + 1 + 2);
                         if (source_id == NULL) {malloc_error();}
-                        sprintf(source_id, "%s@%i", stationName, message_id);
+                        sprintf(source_id, "%s~%i", stationName, message_id);
                         
                         //add the message about to be sent to the visited dict
                         visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
@@ -881,7 +881,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //combine source and message id
                     char* source_id = malloc(strlen(sourceStation) + strlen(id) + 2);
                     if (source_id == NULL) {malloc_error();}
-                    sprintf(source_id, "%s@%s", sourceStation, id);
+                    sprintf(source_id, "%s~%s", sourceStation, id);
 
                     //if the request has visited here previously
                     bool drop_packet = false;
@@ -893,14 +893,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         }
                     }
                     if(drop_packet) {drop_packet = false; continue;}
-
-                    //if it doesn't match, add it to the visited_dict
-                    visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
-                    if (visited_dict == NULL) {malloc_error();}
-                    visited_dict[visited_len] = malloc(strlen(source_id) + 1);
-                    if (visited_dict[visited_len] == NULL) {malloc_error();}
-                    strcpy(visited_dict[visited_len], source_id);
-                    visited_len++;
 
                     //destination station name
                     datagramParts = strtok(NULL, "~");
@@ -933,9 +925,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         journey += strlen(last_stop) + 1; //increment pointer to cut off the first station
 
                         //construct the r message
-                        char* r_message = malloc(4 + strlen(route) + strlen(journey));
+                        char* r_message = malloc(5 + strlen(source_id) + strlen(route) + strlen(journey));
                         if (r_message == NULL) {malloc_error();}
-                        sprintf(r_message, "R~%s~%s", route, journey);
+                        sprintf(r_message, "R~%s~%s~%s", source_id, route, journey);
 
                         //send the r message to the most recent stop on journey
                         Station* last_station = name_to_station(last_stop);
@@ -963,6 +955,14 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     char *journeySoFar = malloc(strlen(datagramParts) + strlen(stationName) + 2);
                     if (journeySoFar == NULL) {malloc_error();}
                     sprintf(journeySoFar, "%s@%s", stationName, datagramParts);
+
+                    //now that the full message is read, add source_id to visited dict                 
+                    visited_dict = realloc(visited_dict, (visited_len + 1) * sizeof(char*));
+                    if (visited_dict == NULL) {malloc_error();}
+                    visited_dict[visited_len] = malloc(strlen(source_id) + 1);
+                    if (visited_dict[visited_len] == NULL) {malloc_error();}
+                    strcpy(visited_dict[visited_len], source_id);
+                    visited_len++;
 
                     //for each neighbour of this node
                     for (int i = 0; i < num_neighbors; i++) {
@@ -1022,6 +1022,21 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 //packet will reuse journey in reverse to trace steps back
                 if(strcmp(messageType,"R") == 0)
                 {
+                    //source_id
+                    datagramParts = strtok(NULL, "~");
+                    char *source = malloc(strlen(datagramParts) + 1);
+                    if (source == NULL) {malloc_error();}
+                    strcpy(source, datagramParts);
+
+                    datagramParts = strtok(NULL, "~");
+                    char *id = malloc(strlen(datagramParts) + 1);
+                    if (id == NULL) {malloc_error();}
+                    strcpy(id, datagramParts);
+                    
+                    char* source_id = malloc(strlen(source) + strlen(id) + 1);
+                    if (source_id == NULL) {malloc_error();}
+                    sprintf(source_id, "%s~%s", source, id);
+
                     //route
                     datagramParts = strtok(NULL, "~");
                     char *route = malloc(strlen(datagramParts) + 1);
@@ -1059,7 +1074,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //construct the r message
                     char* r_message = malloc(3 + strlen(route) + strlen(journey));
                     if (r_message == NULL) {malloc_error();}
-                    sprintf(r_message, "R~%s~%s", route, journey);
+                    sprintf(r_message, "R~%s~%s~%s", source_id, route, journey);
 
                     //send the r message to the most recent stop on journey
                     Station* last_station = name_to_station(last_stop);
