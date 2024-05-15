@@ -21,7 +21,12 @@
 //                  ./makewebpage.sh sstation-server.sh mywebpage.html 
 //                  ./station-server.sh
 
-char* parse_destination(char* query) 
+void malloc_error() {
+    perror("Memory not allocated"); 
+    exit(EXIT_FAILURE); 
+}
+
+void parse_destination(char* query, char** destination_address, char** afterTime_address) 
 {
     //split the query by the lines
     char* line = strtok(query, "\n");
@@ -41,16 +46,30 @@ char* parse_destination(char* query)
             if(strncmp(path, "/?to=", 5) == 0) 
             {
                 //split at ?to= and get third component (first is / and second is to)
-                char* destination = strtok(path, "?=");
-                destination = strtok(NULL, "?=");
-                destination = strtok(NULL, "?=");
+                char* destination = strtok(path, "?=&");
+                destination = strtok(NULL, "?=&");
+                destination = strtok(NULL, "?=&");
 
                 //remove url parameters
                 //TODO save the url param as the afterTime
-                char* final_destination = strtok(destination, "&");
+                char* time = strtok(NULL, "?=&");
+                time = strtok(NULL, "?=&");
+
+                char final_time[6];
+                final_time[0] = time[0];
+                final_time[1] = time[1];
+                final_time[2] = ':';
+                final_time[3] = time[5];
+                final_time[4] = time[6];
+                final_time[5] = '\0';
                 
-                //return the destination if found
-                return final_destination;
+                //save the destination to address if found
+                printf("Destination: %s, Leaving after: %s\n", destination, final_time);
+                strcpy(*(destination_address), destination);
+                strcpy(*(afterTime_address), final_time);
+            }
+            else {
+                strcpy(*(destination_address), "No Destination");
             }
         }
 
@@ -58,8 +77,6 @@ char* parse_destination(char* query)
         line = strtok(NULL, "\n");
     }
 
-    //if no destination was found return NULL
-    return NULL;
 }
 
 #define MAX_LINE_LENGTH 256
@@ -98,11 +115,6 @@ typedef struct {
     //port
     int port;
 }Station;
-
-void malloc_error() {
-    perror("Memory not allocated"); 
-    exit(EXIT_FAILURE); 
-}
 
 //method to get minutes from %H:%M string format
 int getMins(const char* timeString) 
@@ -518,36 +530,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     struct stat filestat;
     stat(filename, &filestat);
     __time_t last_mtime = filestat.st_mtime;
-
-    //get the current time (time the webpage was created) for use in calculations
-    time_t rawtime;
-    struct tm * realTime;
-    time(&rawtime);
-    realTime = localtime(&rawtime);
-
-    //turn time into string
-    char *afterTime = malloc(strlen(":") + 5);
-    char *hour = malloc(3);
-    char *minute = malloc(3);
-    if (afterTime == NULL || hour == NULL || minute == NULL) {malloc_error();}
-
-    //add padding 0 if hour or minute < 10
-    if (realTime->tm_hour < 10) {
-        sprintf (hour, "%02d", realTime->tm_hour);
-    } else {
-        sprintf (hour, "%d", realTime->tm_hour);
-    } if (realTime->tm_min < 10) {
-        sprintf (minute, "%02d", realTime->tm_min);
-    } else {
-        sprintf (minute, "%d", realTime->tm_min);
-    }
-    sprintf(afterTime,"%s:%s",hour, minute);
-    //overwrite time for testing
-    sprintf(afterTime,"%s", "06:00");
-
-    //get filtered timetable
-    Timetable filteredTimetable = filter_timetable(stationTimetable,afterTime);
-
+    
     //declare variables required for tcp and udp
     int tcpServerSocket, newSocket; //udpsocket declared earlier
     struct sockaddr_in tcp_server_addr, udp_server_addr, client_addr;
@@ -691,7 +674,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
         if(filestat.st_mtime != last_mtime) 
         {
             stationTimetable = read_timetable(filename);
-            filteredTimetable = filter_timetable(stationTimetable, afterTime);
             last_mtime = filestat.st_mtime;
             printf("Updated timetable info for %s\n", stationName);
         }
@@ -738,9 +720,12 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 char* cut_query = strtok(query, "\n");
                 printf("    %s: Received TCP, %s\n", stationName, cut_query);
                 
-                //parse the destination
-                char *destination = parse_destination(query);
-                if(destination == NULL)
+                //parse the destination and after time
+                char *destination = malloc(100);
+                char *afterTime = malloc(6);
+                if (destination == NULL || afterTime == NULL) {malloc_error();}
+                parse_destination(query, &destination, &afterTime);
+                if(strcmp(destination, "No Destination") == 0)
                 {
                     // Clean up the connection
                     printf("Closed due to null destination\n");
@@ -749,6 +734,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                 }
 
                 //get the fastest route
+                Timetable filteredTimetable = filter_timetable(stationTimetable, afterTime);
                 Timetable destinationTimetable = destination_timetable(filteredTimetable, destination);
                 char* route = find_fastest_route(destinationTimetable, afterTime);
                 
