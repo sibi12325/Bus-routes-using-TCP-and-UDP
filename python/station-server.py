@@ -83,10 +83,6 @@ def find_fastest_route(timetable, destination, after_time_str):
                 fastest_duration = duration
                 fastest_route = entry
     
-    # no more routes available in timetable 
-    if fastest_route == None:
-        msg = f"No more journeys from {station_name} to {destination} after {after_time_str} today."
-        return msg
 
     return fastest_route
 
@@ -123,6 +119,35 @@ def extract_time(message):
     time_string = time_string.replace("%3A", ":")
     
     return time_string
+
+def list_to_string(list):
+    if len(list) == 1:
+        return str(list[0])
+    else:
+        return '@'.join(map(str, list))
+
+def extract_final_time(string):
+    elements = string.strip("()").split(", ")
+
+    return elements[-1].strip("'")
+
+def add_station(journey, station_name):
+    # Check if journey is a string and convert it to a list
+    if isinstance(journey, str):
+        journey = []
+    # Append the station name to the journey list
+    journey.append(station_name)
+    return journey 
+
+def add_route(routes, route):
+     # Ensure routes is initialized as a list
+    if not isinstance(routes, list):
+        routes = []
+
+    # Append the route to the routes list
+    routes.append(route)
+
+    return routes
 
 
 def server(station_name, browser_port, query_port, neighbours):
@@ -203,14 +228,16 @@ def server(station_name, browser_port, query_port, neighbours):
                 # this will send route to the webpage
                 elif (request.startswith("R")):
                     segment = data.decode().split("~")
-                    answer = f"Route to {parts[1]} from {station_name} arrives at {parts[4]}:<br>"
-                    answer += f"{parts[5]}<br>"
-                    answer += f"{parts[6]}"
+                    routes = segment[4].split('@')
+                    destination_time = extract_final_time(routes[-1])
+                    answer = f"Route to {parts[1]} from {station_name} arrives at {destination_time}:<br>"
+                    for route in routes:
+                        answer += f"{route}<br>"
                     reply = generate_http_response(answer)
-                    client_socket = client_sockets.get(int(segment[3]))
+                    client_socket = client_sockets.get(int(segment[2]))
                     client_socket.sendall(reply.encode())
                     poll_object.unregister(client_socket)
-                    del client_sockets[int(segment[3])]
+                    del client_sockets[int(segment[2])]
                     client_socket.close()
                     
                     
@@ -233,8 +260,16 @@ def server(station_name, browser_port, query_port, neighbours):
                     route = find_fastest_route(timetable, parts[3], parts[4])
                     if route != None:
                         destination_time = route_destination_time(route)
-                        msg = f"R~{station_name}~{parts[1]}~{parts[3]}~{destination_time}~{parts[5]}~{route}"
-                        udp_socket.sendto(msg.encode(), neighbour_address[parts[1]])
+                        if (destination_time < '24:00'):
+                            journey = parts[6].split('@')
+                            routes = parts[5].split('@')
+                            routes = add_route(routes, route)
+                            back_station = journey[-1]
+                            del journey[-1] 
+                            journey = list_to_string(journey)
+                            routes = list_to_string(routes)
+                            msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
+                            udp_socket.sendto(msg.encode(), neighbour_address[back_station])
                 
                 #Recieve the station name and store it
                 elif (parts[0] == "I"):
@@ -271,13 +306,23 @@ def server(station_name, browser_port, query_port, neighbours):
                         if neighbour_address[neighbour] != address: #checks to see if neighbour isnt the same as the where msg came from
                             if route != None and route_destination_time(route) < '24:00':
                                 destination_time = route_destination_time(route)
-                                journey.append(station_name)
-                                routes.append(route)
-                                routes = "@".join(routes)
-                                journey = "@".join(journey)
-                                msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{routes}~{journey}"
-                                udp_socket.sendto(msg.encode(), neighbour)
-                
+                                journey = add_station(journey, station_name)
+                                routes = add_route(routes, route)
+                                routes = list_to_string(routes)
+                                journey = list_to_string(journey)
+                                msg = f"{msg_type}~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{routes}~{journey}"
+                                udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
+
+
+                # This will back track the returning message to back to the sender
+                elif(parts[0] == "R" and parts[3] != station_name):
+                    journey = parts[5].split('@')
+                    back_station = journey[-1]
+                    del journey[-1] 
+                    journey = list_to_string(journey)
+                    msg = f"R~{parts[1]}~{parts[2]}~{parts[3]}~{parts[4]}~{journey}"
+                    udp_socket.sendto(msg.encode(), neighbour_address[back_station])
+                    
 if __name__ == "__main__":
     # Check if the correct number of command line arguments are provided
     if len(sys.argv) < 5:
