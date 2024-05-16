@@ -136,28 +136,6 @@ def add_station(journey, station_name):
         journey.append(station_name)
     return journey
 
-<<<<<<< HEAD
-=======
-def add_route(routes, route):
-    # Ensure routes is initialized as a list
-    if not isinstance(routes, list):
-        routes = []
-
-    # Append the route to the routes list
-    routes.append(route)
-
-    return routes
-
-def acknowledgement(udp_socket, msg): # the ack never = msg ???
-    ack = udp_socket.recv(1024).decode()
-    print("msg and ack:", msg, ack)
-    if ack == msg:
-        msg = "A" + msg[1:]
-        return msg
-    else:
-        return "Acknowledgment error"
-
->>>>>>> afbd12f27c46ba9df2e16e3c51de365d7363e5b4
 
 def server(station_name, browser_port, query_port, neighbours):
 
@@ -224,7 +202,9 @@ def server(station_name, browser_port, query_port, neighbours):
                     if(destination in timetable):
                         # if the station is connected send the route back to the webpage
                         route = find_fastest_route(timetable, destination, leave_time)
-                        response = generate_http_response(route)
+                        answer = f"Route to {destination} from {station_name}:<br>"
+                        answer += f"{route}"
+                        response = generate_http_response(answer)
                         connection.sendall(response.encode())
                         poll_object.unregister(connection)
                         del client_sockets[client_fd]
@@ -244,10 +224,13 @@ def server(station_name, browser_port, query_port, neighbours):
                         answer += f"{route}<br>"
                     reply = generate_http_response(answer)
                     client_socket = client_sockets.get(int(segment[2]))
-                    client_socket.sendall(reply.encode())
-                    poll_object.unregister(client_socket)
-                    del client_sockets[int(segment[2])]
-                    client_socket.close()
+                    if client_socket:
+                        client_socket.sendall(reply.encode())
+                        poll_object.unregister(client_socket)
+                        del client_sockets[int(segment[2])]
+                        client_socket.close()
+                    else:
+                        pass
                     
                     
             # UDP data
@@ -277,17 +260,11 @@ def server(station_name, browser_port, query_port, neighbours):
                             del journey[-1] 
                             journey = list_to_string(journey)
                             routes = list_to_string(routes)
-<<<<<<< HEAD
                             if back_station in neighbour_address:
                                 msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
                                 udp_socket.sendto(msg.encode(), neighbour_address[back_station])
                             else:
                                 pass
-=======
-                            msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
-                            udp_socket.sendto(msg.encode(), neighbour_address[back_station])
-                            udp_socket.sendto(acknowledgement(udp_socket, msg).encode(), neighbour_address[back_station])
->>>>>>> afbd12f27c46ba9df2e16e3c51de365d7363e5b4
                 
                 #Recieve the station name and store it
                 elif (parts[0] == "I"):
@@ -312,7 +289,6 @@ def server(station_name, browser_port, query_port, neighbours):
                             msg_type = "M"
                             msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}~{station_name}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
-                            udp_socket.sendto(acknowledgement(udp_socket, msg).encode(), neighbour_address[neighbour])
 
                 # if the destination is not in the stations timetable then it send its own neighbours
                 # need ack
@@ -322,7 +298,6 @@ def server(station_name, browser_port, query_port, neighbours):
                     station_journey = parts[6].split('@')
                     station_routes = parts[5].split('@')
                     found_valid_route = False
-                    timeout = time.time() + 10
                     for neighbour in neighbour_address.keys():
                         individual_routes = station_routes[:]
                         msg_type = "M"
@@ -337,21 +312,10 @@ def server(station_name, browser_port, query_port, neighbours):
                             destination_time = route_destination_time(route)
                             msg = f"{msg_type}~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{sent_routes}~{sent_journey}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
-                            udp_socket.sendto(acknowledgement(udp_socket, msg).encode(), neighbour_address[neighbour])
                             found_valid_route = True
                     if not found_valid_route:
                     # Handle dead end by deleting the message
                         pass 
-                    # Check if timeout has occurred
-                    if time.time() > timeout:
-                        # Send a message back to the webpage indicating no journey available
-                        no_journey_msg = "No journey available within specified time."
-                        response = generate_http_response(no_journey_msg)
-                        client_socket = client_sockets.get(int(segment[2]))
-                        client_socket.sendall(response.encode())
-                        poll_object.unregister(client_socket)
-                        del client_sockets[int(segment[2])]
-                        client_socket.close()
 
 
                 # This will back track the returning message to back to the sender
