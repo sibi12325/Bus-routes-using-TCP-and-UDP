@@ -132,15 +132,12 @@ def extract_final_time(string):
     return elements[-1].strip("'")
 
 def add_station(journey, station_name):
-    # Check if journey is a string and convert it to a list
-    if isinstance(journey, str):
-        journey = []
-    # Append the station name to the journey list
-    journey.append(station_name)
-    return journey 
+    if station_name not in journey:
+        journey.append(station_name)
+    return journey
 
 def add_route(routes, route):
-     # Ensure routes is initialized as a list
+    # Ensure routes is initialized as a list
     if not isinstance(routes, list):
         routes = []
 
@@ -298,20 +295,29 @@ def server(station_name, browser_port, query_port, neighbours):
                 # if the destination is not in the stations timetable then it send its own neighbours
                 # need ack
                 elif(parts[0] == "M" and parts[3] not in timetable):
-                    journey = parts[6].split('@')
-                    routes = parts[5].split('@')
+                    if len(neighbour_address) == 1:
+                        continue  # Skip the block if there is only one neighbor
+                    station_journey = parts[6].split('@')
+                    station_routes = parts[5].split('@')
+                    found_valid_route = False
                     for neighbour in neighbour_address.keys():
+                        individual_routes = station_routes[:]
                         msg_type = "M"
+                        if neighbour_address[neighbour] == address: #checks to see if neighbour isnt the same as the where msg came from
+                            continue
                         route = find_fastest_route(timetable, neighbour, parts[4])
-                        if neighbour_address[neighbour] != address: #checks to see if neighbour isnt the same as the where msg came from
-                            if route != None and route_destination_time(route) < '24:00':
-                                destination_time = route_destination_time(route)
-                                journey = add_station(journey, station_name)
-                                routes = add_route(routes, route)
-                                routes = list_to_string(routes)
-                                journey = list_to_string(journey)
-                                msg = f"{msg_type}~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{routes}~{journey}"
-                                udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
+                        if route != None and route_destination_time(route) < '24:00':
+                            individual_journey = add_station(station_journey, station_name)
+                            individual_routes.append(route)
+                            sent_routes = list_to_string(individual_routes)
+                            sent_journey = list_to_string(individual_journey)
+                            destination_time = route_destination_time(route)
+                            msg = f"{msg_type}~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{sent_routes}~{sent_journey}"
+                            udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
+                            found_valid_route = True
+                    if not found_valid_route:
+                    # Handle dead end by deleting the message
+                        pass 
 
 
                 # This will back track the returning message to back to the sender
