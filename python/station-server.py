@@ -146,6 +146,15 @@ def add_route(routes, route):
 
     return routes
 
+def acknowledgement(udp_socket, msg): # the ack never = msg ???
+    ack = udp_socket.recv(1024).decode()
+    print("msg and ack:", msg, ack)
+    if ack == msg:
+        msg = "A" + msg[1:]
+        return msg
+    else:
+        return "Acknowledgment error"
+
 
 def server(station_name, browser_port, query_port, neighbours):
 
@@ -267,6 +276,7 @@ def server(station_name, browser_port, query_port, neighbours):
                             routes = list_to_string(routes)
                             msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
                             udp_socket.sendto(msg.encode(), neighbour_address[back_station])
+                            udp_socket.sendto(acknowledgement(udp_socket, msg).encode(), neighbour_address[back_station])
                 
                 #Recieve the station name and store it
                 elif (parts[0] == "I"):
@@ -291,6 +301,7 @@ def server(station_name, browser_port, query_port, neighbours):
                             msg_type = "M"
                             msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}~{station_name}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
+                            udp_socket.sendto(acknowledgement(udp_socket, msg).encode(), neighbour_address[neighbour])
 
                 # if the destination is not in the stations timetable then it send its own neighbours
                 # need ack
@@ -314,6 +325,7 @@ def server(station_name, browser_port, query_port, neighbours):
                             destination_time = route_destination_time(route)
                             msg = f"{msg_type}~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{sent_routes}~{sent_journey}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
+                            udp_socket.sendto(acknowledgement(udp_socket, msg).encode(), neighbour_address[neighbour])
                             found_valid_route = True
                     if not found_valid_route:
                     # Handle dead end by deleting the message
