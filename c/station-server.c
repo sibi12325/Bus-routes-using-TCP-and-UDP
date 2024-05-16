@@ -731,9 +731,6 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     continue;
                 }
 
-                //start the timeout for reporting no route 
-                time(&query_got);
-
                 //get the fastest route
                 Timetable filteredTimetable = filter_timetable(stationTimetable, afterTime);
                 Timetable destinationTimetable = destination_timetable(filteredTimetable, destination);
@@ -752,6 +749,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 //if station does not neighbor the destination, send out UDP request
                 if (!neighbors_destination) {
+                    //start the timeout for reporting no route 
+                    time(&query_got);
                     message_id++;
                     //construct the initial M message, send it to all neighbors
                     //M~source_station_name~destination_station_name~time~route~journey
