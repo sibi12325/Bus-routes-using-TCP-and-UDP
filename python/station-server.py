@@ -136,16 +136,6 @@ def add_station(journey, station_name):
         journey.append(station_name)
     return journey
 
-def add_route(routes, route):
-    # Ensure routes is initialized as a list
-    if not isinstance(routes, list):
-        routes = []
-
-    # Append the route to the routes list
-    routes.append(route)
-
-    return routes
-
 
 def server(station_name, browser_port, query_port, neighbours):
 
@@ -260,13 +250,16 @@ def server(station_name, browser_port, query_port, neighbours):
                         if (destination_time < '24:00'):
                             journey = parts[6].split('@')
                             routes = parts[5].split('@')
-                            routes = add_route(routes, route)
+                            routes.append(route)
                             back_station = journey[-1]
                             del journey[-1] 
                             journey = list_to_string(journey)
                             routes = list_to_string(routes)
-                            msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
-                            udp_socket.sendto(msg.encode(), neighbour_address[back_station])
+                            if back_station in neighbour_address:
+                                msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
+                                udp_socket.sendto(msg.encode(), neighbour_address[back_station])
+                            else:
+                                pass
                 
                 #Recieve the station name and store it
                 elif (parts[0] == "I"):
@@ -300,6 +293,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     station_journey = parts[6].split('@')
                     station_routes = parts[5].split('@')
                     found_valid_route = False
+                    timeout = time.time() + 10
                     for neighbour in neighbour_address.keys():
                         individual_routes = station_routes[:]
                         msg_type = "M"
@@ -318,6 +312,16 @@ def server(station_name, browser_port, query_port, neighbours):
                     if not found_valid_route:
                     # Handle dead end by deleting the message
                         pass 
+                    # Check if timeout has occurred
+                    if time.time() > timeout:
+                        # Send a message back to the webpage indicating no journey available
+                        no_journey_msg = "No journey available within specified time."
+                        response = generate_http_response(no_journey_msg)
+                        client_socket = client_sockets.get(int(segment[2]))
+                        client_socket.sendall(response.encode())
+                        poll_object.unregister(client_socket)
+                        del client_sockets[int(segment[2])]
+                        client_socket.close()
 
 
                 # This will back track the returning message to back to the sender
@@ -326,8 +330,11 @@ def server(station_name, browser_port, query_port, neighbours):
                     back_station = journey[-1]
                     del journey[-1] 
                     journey = list_to_string(journey)
-                    msg = f"R~{parts[1]}~{parts[2]}~{parts[3]}~{parts[4]}~{journey}"
-                    udp_socket.sendto(msg.encode(), neighbour_address[back_station])
+                    if back_station in neighbour_address:
+                        msg = f"R~{parts[1]}~{parts[2]}~{parts[3]}~{parts[4]}~{journey}"
+                        udp_socket.sendto(msg.encode(), neighbour_address[back_station])
+                    else:
+                        pass
                     
 if __name__ == "__main__":
     # Check if the correct number of command line arguments are provided
