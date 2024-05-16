@@ -490,6 +490,10 @@ char* reply_destination;
 
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
+    if (received_len == 0) {
+        return "No valid route after ";
+    }
+
     char* best_route;
     char* fastest_time = "23:59";
 
@@ -629,21 +633,15 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     int maxFileDescriptor;
 
     //used for a timer
-    clock_t first_response = 99999999999999999;
-    clock_t timer;
+    time_t query_got = 99999999999999999;
+    time_t timer;
 
     while(1) 
     {
-
-        //if this station has received any UDP replies, start a timer
-        if (received_len > 0 && first_response == 99999999999999999) {
-            //start a 1 second timer
-            first_response = clock();
-        }
-
-        timer = clock();
-        if (timer - 10 > first_response) {
-            first_response = 99999999999999999;
+        //check query timeout clock
+        time(&timer);
+        if (timer > query_got) {
+            query_got = 99999999999999999;
 
             printf("    %s: Picking fastest route out of %i response(s)\n", stationName, received_len);
             //pick the fastest route out of all the possibilities
@@ -733,6 +731,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     continue;
                 }
 
+                //start the timeout for reporting no route 
+                time(&query_got);
+
                 //get the fastest route
                 Timetable filteredTimetable = filter_timetable(stationTimetable, afterTime);
                 Timetable destinationTimetable = destination_timetable(filteredTimetable, destination);
@@ -768,9 +769,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         char* neighbor_route = find_fastest_route(destinationTimetable, afterTime);
 
                         if (neighbor_route == NULL) {
-                            printf("    %s: ROUTE IS NULL FOR DESTINATION %s\n", stationName, neighbor_station->name);
+                            printf("    %s: No valid route\n", stationName);
                             continue;
-                            //TODO too late in the day, send an R message back
                         }
 
                         //extract the last arrival time from route
@@ -981,9 +981,8 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         char* route = find_fastest_route(newDestinationTimetable, currentTime);
 
                         if (route == NULL) {
-                            printf("    %s: go to bed loser\n", stationName);
+                            printf("    %s: No valid route\n", stationName);
                             continue;
-                            //TODO too late in the day, send an R message back
                         }
 
                         //extract the last arrival time from route
