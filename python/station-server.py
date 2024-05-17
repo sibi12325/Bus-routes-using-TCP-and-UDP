@@ -212,7 +212,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     if(destination in timetable):
                         # if the station is connected send the route back to the webpage
                         route = find_fastest_route(timetable, destination, leave_time)
-                        answer = f"Route to {destination} from {station_name}:<br>"
+                        answer = f"Route to {destination} from {station_name}: "
                         answer += f"{route}"
                         response = generate_http_response(answer)
                         connection.sendall(response.encode())
@@ -229,9 +229,9 @@ def server(station_name, browser_port, query_port, neighbours):
                     segment = data.decode().split("~")
                     routes = segment[4].split('@')
                     destination_time = extract_final_time(routes[-1])
-                    answer = f"Route to {parts[1]} from {station_name} arrives at {destination_time}:<br>"
+                    answer = f"Route to {parts[1]} from {station_name} arrives at {destination_time}: "
                     for route in routes:
-                        answer += f"{route}<br>"
+                        answer += f"{route},"
                     reply = generate_http_response(answer)
                     client_socket = client_sockets.get(int(segment[2]))
                     if client_socket:
