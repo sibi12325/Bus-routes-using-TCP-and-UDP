@@ -62,7 +62,9 @@ def find_fastest_route(timetable, destination, after_time_str):
     # Initialize variables to store the fastest route information
     fastest_duration = None
     fastest_route = None
-
+    print(after_time_str)
+    if (after_time_str[0] == "0"):
+        after_time_str = after_time_str[1:]
     # Parse the after_time string into a datetime object
     after_time = datetime.datetime.strptime(after_time_str, "%H:%M")
 
@@ -81,7 +83,6 @@ def find_fastest_route(timetable, destination, after_time_str):
                 fastest_duration = duration
                 fastest_route = entry
     
-
     return fastest_route
 
 
@@ -157,11 +158,12 @@ def server(station_name, browser_port, query_port, neighbours):
     udp_socket.bind((IP, query_port))
     print(f"{station_name} UDP Server listening on {IP}:{query_port}")
 
+    time.sleep(2)
     # Send station names to its neighbours
     station_to_neighbour = f"I~{station_name}"
     for neighbour in neighbours:
-        time.sleep(2)
         udp_socket.sendto(station_to_neighbour.encode(), neighbour)
+        print(f"Send To {neighbour}: {station_to_neighbour}")
 
 
     #Read the timetable
