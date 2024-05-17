@@ -613,7 +613,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
     {
         //check query timeout clock
         time(&timer);
-        if (timer > query_got) {
+        if (timer - 1 > query_got) {
             query_got = 99999999999999999;
 
             printf("    %s: Picking fastest route out of %i response(s)\n", stationName, received_len);
@@ -1028,7 +1028,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         //add R messages route to the received dict
                         received_dict = realloc(received_dict, (received_len + 1) * sizeof(char*));
                         if (received_dict == NULL) {malloc_error();}
-                        received_dict[received_len] = malloc(strlen(route) + 1);
+                        received_dict[received_len] = malloc(strlen(route) + 100);
                         if (received_dict[received_len] == NULL) {malloc_error();}
                         strcpy(received_dict[received_len], route);
                         received_len++;
