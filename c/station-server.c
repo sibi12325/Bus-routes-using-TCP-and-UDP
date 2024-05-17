@@ -312,38 +312,11 @@ Timetable filter_timetable(Timetable timetable, char* cutOffTimeStr)
 char *generate_http_response(int statusCode, char* responseBody) 
 {
     char *response;
-
-    // OK response
-    if (statusCode == 200) 
-    {
-        //store length of response body as string
-        char *responseBodyLength = malloc(50);
-        if (responseBodyLength == NULL) {malloc_error();}
-        sprintf(responseBodyLength,"%ld",strlen(responseBody));
-
-        //allocate memory for response and write message to it
-        response = malloc(strlen("HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n%s") + strlen(responseBody) + strlen(responseBodyLength));
-        if (response == NULL) {malloc_error();}
-        sprintf(response, "HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n%s", responseBodyLength, responseBody);
-    } 
-    // Not Found response
-    else if (statusCode == 404) 
-    {
-        response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-    } 
-    // Invalid status code
-    else 
-    {
-        //store statusCode as string
-        char *statusCodeStr = malloc(3);
-        if (statusCodeStr == NULL) {malloc_error();}
-        sprintf(statusCodeStr,"%d",statusCode);
-
-        //allocate memory for response and write message to it
-        response = malloc(strlen("HTTP/1.1 %d\r\nContent-Length: 0\r\n\r\n") + strlen(statusCodeStr));
-        if (response == NULL) {malloc_error();}
-        sprintf(response, "HTTP/1.1 %d\r\nContent-Length: 0\r\n\r\n", statusCode);
-    }
+    
+    //allocate memory for response and write message to it
+    response = malloc(strlen("HTTP/1.1 200 OK\r\nContent-Type : text/html\r\nContent-Length: %s\r\n\r\n%s") + strlen(responseBody));
+    if (response == NULL) {malloc_error();}
+    sprintf(response, "HTTP/1.1 200 OK\r\nContent-Type : text/html\r\nConnection: Closed\r\n\r\n%s", responseBody);
 
     return response;
 }
