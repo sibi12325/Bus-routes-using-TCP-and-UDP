@@ -85,7 +85,7 @@ def find_fastest_route(timetable, destination, after_time_str):
     return fastest_route
 
 
-def send_udp_own_station(client_fd, destination, station_name, query_port, leave_time):
+def send_udp_own_station(IP, client_fd, destination, station_name, query_port, leave_time):
     initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     msg = f"Q~{station_name}~{client_fd}~{destination}~{leave_time}"
     initial_socket.sendto(msg.encode(), (IP, query_port))
@@ -211,7 +211,7 @@ def server(station_name, browser_port, query_port, neighbours):
                         connection.close()
                     elif(destination is not None):
                         # if the station not connected send it udp server of this station
-                        send_udp_own_station(client_fd, destination, station_name, query_port, leave_time)
+                        send_udp_own_station(IP, client_fd, destination, station_name, query_port, leave_time)
                         
 
                 # this will send route to the webpage
@@ -286,8 +286,7 @@ def server(station_name, browser_port, query_port, neighbours):
                         route = find_fastest_route(timetable, neighbour, parts[4])
                         if route != None and route_destination_time(route) < '24:00':
                             destination_time = route_destination_time(route)
-                            msg_type = "M"
-                            msg = f"{msg_type}~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}~{station_name}"
+                            msg = f"M~{station_name}~{parts[2]}~{parts[3]}~{destination_time}~{route}~{station_name}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
 
                 # if the destination is not in the stations timetable then it send its own neighbours
@@ -300,7 +299,6 @@ def server(station_name, browser_port, query_port, neighbours):
                     found_valid_route = False
                     for neighbour in neighbour_address.keys():
                         individual_routes = station_routes[:]
-                        msg_type = "M"
                         if neighbour_address[neighbour] == address: #checks to see if neighbour isnt the same as the where msg came from
                             continue
                         route = find_fastest_route(timetable, neighbour, parts[4])
@@ -310,7 +308,7 @@ def server(station_name, browser_port, query_port, neighbours):
                             sent_routes = list_to_string(individual_routes)
                             sent_journey = list_to_string(individual_journey)
                             destination_time = route_destination_time(route)
-                            msg = f"{msg_type}~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{sent_routes}~{sent_journey}"
+                            msg = f"M~{parts[1]}~{parts[2]}~{parts[3]}~{destination_time}~{sent_routes}~{sent_journey}"
                             udp_socket.sendto(msg.encode(), neighbour_address[neighbour])
                             found_valid_route = True
                     if not found_valid_route:
