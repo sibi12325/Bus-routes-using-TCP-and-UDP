@@ -140,9 +140,8 @@ def extract_final_time(string):
 
 def add_station(journey, station_name):
     if station_name not in journey:
-        journey.append(station_name)
+        journey.insert(0, station_name)  # Add the station to the front of the list
     return journey
-
 
 def server(station_name, browser_port, query_port, neighbours):
 
@@ -186,9 +185,29 @@ def server(station_name, browser_port, query_port, neighbours):
     #Dictionary of client sockets 
     client_sockets = {}
 
+    # Dictionary to store timestamps of queries {client_fd: timestamp}
+    query_timestamps = {}
 
     while True:
-        events = poll_object.poll()
+
+        current_time = time.time()
+        events = poll_object.poll() 
+
+        # Check for timeouts
+        to_remove = []
+        for client_fd, timestamp in query_timestamps.items():
+            if current_time - timestamp > 10: # change this for timeout duration
+                if client_fd in client_sockets:
+                    client_socket = client_sockets[client_fd]
+                    response = generate_http_response("No valid route") # change message according to c
+                    client_socket.sendall(response.encode())
+                    poll_object.unregister(client_socket)
+                    client_socket.close()
+                    del client_sockets[client_fd]
+                to_remove.append(client_fd)
+        for fd in to_remove:
+            del query_timestamps[fd]
+
         for fd, event in events:
             # TCP connection
             if fd == tcp_socket.fileno() and event & select.POLLIN:
@@ -220,6 +239,8 @@ def server(station_name, browser_port, query_port, neighbours):
                         del client_sockets[client_fd]
                         connection.close()
                     elif(destination is not None):
+                        # add the current time to the timestamp of the client_fd
+                        query_timestamps[client_fd] = current_time
                         # if the station not connected send it udp server of this station
                         send_udp_own_station(IP, client_fd, destination, station_name, query_port, leave_time)
                         
@@ -229,7 +250,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     segment = data.decode().split("~")
                     routes = segment[4].split('@')
                     destination_time = extract_final_time(routes[-1])
-                    answer = f"Route to {parts[1]} from {station_name} arrives at {destination_time}: "
+                    answer = f"Route to {parts[1]} from {parts[3]} arrives at {destination_time}: "
                     for route in routes:
                         answer += f"{route},"
                     reply = generate_http_response(answer)
@@ -287,7 +308,7 @@ def server(station_name, browser_port, query_port, neighbours):
                             print("     back station:", back_station)
                             print("     neighbour address", neighbour_address)
                             if back_station in neighbour_address:
-                                msg = f"R~{parts[3]}~{parts[2]}~{parts[1]}~{routes}~{journey}"
+                                msg = f"R~{parts[1]}~{parts[2]}~{parts[3]}~{routes}~{journey}"
                                 udp_socket.sendto(msg.encode(), neighbour_address[back_station])
                                 print(f"Send to {neighbour_address[back_station]} : {msg}")
                             else:
@@ -346,7 +367,7 @@ def server(station_name, browser_port, query_port, neighbours):
 
 
                 # This will back track the returning message to back to the sender
-                elif(parts[0] == "R" and parts[3] != station_name):
+                elif(parts[0] == "R" and parts[1] != station_name):
                     journey = parts[5].split('@')
                     back_station = journey[0]
                     del journey[0] 
