@@ -482,10 +482,10 @@ char* choose_fastest_route() {
         }
     }
 
-    //replace \@s with line breaks
+    //replace @s with line breaks
     for (int i = 0; i < strlen(best_route); i++) {
         if (best_route[i] == '@') {
-            best_route[i] = '\n';
+            best_route[i] = ',';
         }
     }
 
