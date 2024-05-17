@@ -85,7 +85,7 @@ def find_fastest_route(timetable, destination, after_time_str):
     return fastest_route
 
 
-def send_udp_own_station(client_fd, destination, station_name, query_port, leave_time):
+def send_udp_own_station(IP, client_fd, destination, station_name, query_port, leave_time):
     initial_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     msg = f"Q~{station_name}~{client_fd}~{destination}~{leave_time}"
     initial_socket.sendto(msg.encode(), (IP, query_port))
@@ -138,7 +138,7 @@ def add_station(journey, station_name):
 def server(station_name, browser_port, query_port, neighbours):
 
     
-    IP = "localhost"
+    IP = "0.0.0.0"
     # Convert port numbers to integers
     browser_port = int(browser_port)
     query_port = int(query_port)
@@ -211,7 +211,7 @@ def server(station_name, browser_port, query_port, neighbours):
                         connection.close()
                     elif(destination is not None):
                         # if the station not connected send it udp server of this station
-                        send_udp_own_station(client_fd, destination, station_name, query_port, leave_time)
+                        send_udp_own_station(IP, client_fd, destination, station_name, query_port, leave_time)
                         
 
                 # this will send route to the webpage
