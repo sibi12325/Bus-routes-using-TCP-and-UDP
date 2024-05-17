@@ -312,7 +312,7 @@ Timetable filter_timetable(Timetable timetable, char* cutOffTimeStr)
 char *generate_http_response(int statusCode, char* responseBody) 
 {
     char *response;
-    
+
     //allocate memory for response and write message to it
     response = malloc(strlen("HTTP/1.1 200 OK\r\nContent-Type : text/html\r\nContent-Length: %s\r\n\r\n%s") + strlen(responseBody));
     if (response == NULL) {malloc_error();}
@@ -464,7 +464,7 @@ char* reply_destination;
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
     if (received_len == 0) {
-        return "No valid route after ";
+        return "No valid route  ";
     }
 
     char* best_route;
@@ -899,7 +899,7 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                         //construct the r message
                         char* r_message = malloc(5 + strlen(source_id) + strlen(route) + strlen(journey));
                         if (r_message == NULL) {malloc_error();}
-                        sprintf(r_message, "R~%s~%s~%s", source_id, route, journey);
+                        sprintf(r_message, "R~%s~%s~%s~%s", source_id, destStation, route, journey);
 
                         //send the r message to the most recent stop on journey
                         Station* last_station = name_to_station(last_stop);
@@ -1008,6 +1008,12 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     if (source_id == NULL) {malloc_error();}
                     sprintf(source_id, "%s~%s", source, id);
 
+                    //destination station name
+                    datagramParts = strtok(NULL, "~");
+                    char *destStation = malloc(strlen(datagramParts) + 1);
+                    if (destStation == NULL) {malloc_error();}
+                    strcpy(destStation, datagramParts);
+
                     //route
                     datagramParts = strtok(NULL, "~");
                     char *route = malloc(strlen(datagramParts) + 1);
@@ -1045,9 +1051,10 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
                     //construct the r message
                     char* r_message = malloc(3 + strlen(route) + strlen(journey));
                     if (r_message == NULL) {malloc_error();}
-                    sprintf(r_message, "R~%s~%s~%s", source_id, route, journey);
+                    sprintf(r_message, "R~%s~%s~%s~%s", source_id, destStation, route, journey);
 
                     //send the r message to the most recent stop on journey
+                    printf("%s\n", last_stop);
                     Station* last_station = name_to_station(last_stop);
                     send_a_udp_message(r_message, last_station->address, last_station->port);
                     printf("    %s: Sent %s to %s\n", stationName, r_message, last_station->name);
