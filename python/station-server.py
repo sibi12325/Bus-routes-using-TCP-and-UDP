@@ -293,10 +293,8 @@ def server(station_name, browser_port, query_port, neighbours):
 
                 if(parts[0] == "M" and parts[3] in timetable):
                     route = find_fastest_route(timetable, parts[3], parts[4])
-                    print("     route is : ", route)
                     if route != None:
                         destination_time = route_destination_time(route)
-                        print("     dest time:", destination_time)
                         if (destination_time < '24:00'):
                             journey = parts[6].split('@')
                             routes = parts[5].split('@')
