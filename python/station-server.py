@@ -8,8 +8,6 @@ import datetime
 import select
 import hashlib
 
-IP = "localhost"
-
 
 def parse_destination(query):
     # Split the query into lines
@@ -139,6 +137,8 @@ def add_station(journey, station_name):
 
 def server(station_name, browser_port, query_port, neighbours):
 
+    
+    IP = "localhost"
     # Convert port numbers to integers
     browser_port = int(browser_port)
     query_port = int(query_port)
