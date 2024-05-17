@@ -464,7 +464,7 @@ char* reply_destination;
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
     if (received_len == 0) {
-        return "No valid route  ";
+        return "No valid route";
     }
 
     char* best_route;
