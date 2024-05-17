@@ -300,7 +300,7 @@ def server(station_name, browser_port, query_port, neighbours):
 
                 #this will send msg back to the tcp server
                 # need ack
-                elif(parts[0] == "R" and parts[3] == station_name):
+                elif(parts[0] == "R" and parts[1] == station_name):
                     tcp_send_back = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     tcp_send_back.connect((IP, browser_port))
                     tcp_send_back.sendall(data)
