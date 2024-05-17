@@ -1,3 +1,11 @@
+//CITS3002 - Computer Networks Project
+//Created by
+//Cooper Thompson - 23621342 
+//Sibi Moothedan - 23615908
+//Devarsh Patel - 22964473
+//Emily Matthews - 23476614
+//Developed for Linux Ubuntu 22.04
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -464,7 +472,10 @@ char* reply_destination;
 //once all the R messages have returned, searches them for the fastest one, saves that as the route
 char* choose_fastest_route() {
     if (received_len == 0) {
-        return "No valid route";
+        char* route = malloc(strlen("No valid route to %s") + strlen(reply_destination));
+        if (route == NULL) {malloc_error();}
+        sprintf(route, "No valid route to %s", reply_destination);
+        return route;
     }
 
     char* best_route;
@@ -784,9 +795,9 @@ void start_server(char* stationName, int browser_port, int query_port, char** ne
 
                 if(route == NULL)
                 {
-                    route = malloc(strlen("There is no journey from %s to %s leaving after %s today") + strlen(stationName) + strlen(destination) + strlen(afterTime));
+                    route = malloc(strlen("No valid route to %s") + strlen(destination));
                     if (route == NULL) {malloc_error();}
-                    sprintf(route,"There is no journey from %s to %s leaving after %s today",stationName,destination,afterTime);
+                    sprintf(route,"No valid route to %s", destination);
                 }
 
                 if(strcmp(route, "Searching...") != 0) {

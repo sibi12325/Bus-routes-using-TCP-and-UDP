@@ -1,10 +1,16 @@
 #!/usr/bin/python3
 
+# CITS3002 - Computer Networks Project
+# Created by
+# Cooper Thompson - 23621342 
+# Sibi Moothedan - 23615908
+# Devarsh Patel - 22964473
+# Emily Matthews - 23476614
+# Developed for Linux Ubuntu 22.04
 
 import sys
 import socket
 import time
-import datetime
 import select
 import hashlib
 
@@ -188,6 +194,9 @@ def server(station_name, browser_port, query_port, neighbours):
     # Dictionary to store timestamps of queries {client_fd: timestamp}
     query_timestamps = {}
 
+    # List of source_ids that have visted this station previously, will be dropped
+    visited = []
+
     while True:
 
         current_time = time.time()
@@ -196,10 +205,10 @@ def server(station_name, browser_port, query_port, neighbours):
         # Check for timeouts
         to_remove = []
         for client_fd, timestamp in query_timestamps.items():
-            if current_time - timestamp > 10: # change this for timeout duration
+            if current_time - timestamp > 3: # change this for timeout duration
                 if client_fd in client_sockets:
                     client_socket = client_sockets[client_fd]
-                    response = generate_http_response("No valid route") # change message according to c
+                    response = generate_http_response(f"Fastest route to {destination}: No valid route to {destination}") # change message according to c
                     client_socket.sendall(response.encode())
                     poll_object.unregister(client_socket)
                     client_socket.close()
@@ -231,7 +240,9 @@ def server(station_name, browser_port, query_port, neighbours):
                     if(destination in timetable):
                         # if the station is connected send the route back to the webpage
                         route = find_fastest_route(timetable, destination, leave_time)
-                        answer = f"Route to {destination} from {station_name}: "
+                        answer = f"Fastest route to {destination}: "
+                        if (route == None):
+                            route = f"No valid route to {destination}"
                         answer += f"{route}"
                         response = generate_http_response(answer)
                         connection.sendall(response.encode())
@@ -250,7 +261,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     segment = data.decode().split("~")
                     routes = segment[4].split('@')
                     destination_time = extract_final_time(routes[-1])
-                    answer = f"Route to {parts[1]} from {parts[3]} arrives at {destination_time}: "
+                    answer = f"Route to {parts[1]} from {parts[3]}: "
                     for route in routes:
                         answer += f"{route},"
                     reply = generate_http_response(answer)
@@ -277,8 +288,14 @@ def server(station_name, browser_port, query_port, neighbours):
                     timetable = read_timetable(filename)
                     hash = new_hash
 
-                #If there is route to destination and sends it back
-                # need ack
+                #if its an m message, construct the source_id
+                if(parts[0] == "M"):
+                    source_id = parts[1] + "~" + parts[2]
+                    if (source_id in visited):
+                        print(f"Dropping packet : {source_id}")
+                        continue
+                    visited.append(source_id)
+
                 if(parts[0] == "M" and parts[3] == station_name):
                     journey = parts[6].split('@')
                     routes = parts[5].split('@')
@@ -291,7 +308,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     print(f"Send to {address} : {msg}")
 
 
-                if(parts[0] == "M" and parts[3] in timetable):
+                elif(parts[0] == "M" and parts[3] in timetable):
                     route = find_fastest_route(timetable, parts[3], parts[4])
                     if route != None:
                         destination_time = route_destination_time(route)
@@ -303,8 +320,6 @@ def server(station_name, browser_port, query_port, neighbours):
                             del journey[0] 
                             journey = list_to_string(journey)
                             routes = list_to_string(routes)
-                            print("     back station:", back_station)
-                            print("     neighbour address", neighbour_address)
                             if back_station in neighbour_address:
                                 msg = f"R~{parts[1]}~{parts[2]}~{parts[3]}~{routes}~{journey}"
                                 udp_socket.sendto(msg.encode(), neighbour_address[back_station])
