@@ -197,6 +197,8 @@ def server(station_name, browser_port, query_port, neighbours):
     # List of source_ids that have visted this station previously, will be dropped
     visited = []
 
+    message_id = 30
+
     while True:
 
         current_time = time.time()
@@ -205,7 +207,7 @@ def server(station_name, browser_port, query_port, neighbours):
         # Check for timeouts
         to_remove = []
         for client_fd, timestamp in query_timestamps.items():
-            if current_time - timestamp > 3: # change this for timeout duration
+            if current_time - timestamp > 5: # change this for timeout duration
                 if client_fd in client_sockets:
                     client_socket = client_sockets[client_fd]
                     response = generate_http_response(f"Fastest route to {destination}: No valid route to {destination}") # change message according to c
@@ -225,7 +227,8 @@ def server(station_name, browser_port, query_port, neighbours):
                 print(f"New TCP connection from {address}")
                 if(request.startswith("GET")):
                     # Store the client socket and its file descriptor in the dictionary
-                    client_fd = connection.fileno()
+                    message_id += 1
+                    client_fd = message_id
                     client_sockets[client_fd] = connection
                     poll_object.register(connection, select.POLLOUT)
                     #calculate new hash
@@ -288,7 +291,7 @@ def server(station_name, browser_port, query_port, neighbours):
                     timetable = read_timetable(filename)
                     hash = new_hash
 
-                #if its an m message, construct the source_id
+                # if its an m message, construct the source_id
                 if(parts[0] == "M"):
                     source_id = parts[1] + "~" + parts[2]
                     if (source_id in visited):
